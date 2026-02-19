@@ -21,28 +21,21 @@ app.setErrorHandler((error, _req, reply) => {
   if (error instanceof ZodError) {
     return reply.status(400).send({ message: 'Validation error', issues: error.issues });
   }
-  const statusCode = (error as { statusCode?: number }).statusCode ?? 500;
-  const message = statusCode >= 500 ? 'Internal Server Error' : error.message;
-  if (statusCode >= 500) app.log.error(error);
+  const err = error as Error & { statusCode?: number };
+  const statusCode = err.statusCode ?? 500;
+  const message = statusCode >= 500 ? 'Internal Server Error' : err.message;
+  if (statusCode >= 500) app.log.error(err);
   reply.status(statusCode).send({ message });
 });
 
 await app.register(helmet, { contentSecurityPolicy: false });
 await app.register(rateLimit, { global: true, max: 300, timeWindow: '1 minute' });
 
-const corsOptions =
-  config.env === 'development'
-    ? { origin: true }
-    : {
-        origin: (origin: string | undefined, cb: (err: Error | null, allow?: boolean) => void) => {
-          if (!origin) return cb(null, true);
-          if (config.frontendOrigins.includes(origin)) return cb(null, true);
-          return cb(new Error('Origin not allowed'), false);
-        },
-        credentials: true
-      };
-
-await app.register(cors, corsOptions);
+if (config.env === 'development') {
+  await app.register(cors, { origin: true });
+} else {
+  await app.register(cors, { origin: config.frontendOrigins, credentials: true });
+}
 await app.register(jwt, { secret: config.jwtSecret, sign: { expiresIn: '12h' } });
 await app.register(multipart, { limits: { fileSize: 10 * 1024 * 1024, files: 1 } });
 

@@ -70,7 +70,8 @@ export async function bookingRoutes(app: FastifyInstance) {
   app.post('/api/admin/quick-entry/approve', { preHandler: [requireRole([UserRole.CONCIERGE, UserRole.COUNCIL, UserRole.PROPERTY_MANAGER])] }, async (req) => {
     const body = createSchema.parse(req.body);
     const user = req.user;
-    const allowOverride = [UserRole.COUNCIL, UserRole.PROPERTY_MANAGER].includes(user.role);
+    const overrideRoles: UserRole[] = [UserRole.COUNCIL, UserRole.PROPERTY_MANAGER];
+    const allowOverride = overrideRoles.includes(user.role);
 
     const booking = await prisma.$transaction(async (tx) => {
       await assertNoConflict(
@@ -127,7 +128,8 @@ export async function bookingRoutes(app: FastifyInstance) {
     const user = req.user;
     const bookingId = (req.params as { id: string }).id;
     const existing = await prisma.booking.findUniqueOrThrow({ where: { id: bookingId } });
-    const allowOverride = [UserRole.COUNCIL, UserRole.PROPERTY_MANAGER].includes(user.role) && !!body.overrideConflict;
+    const overrideRoles: UserRole[] = [UserRole.COUNCIL, UserRole.PROPERTY_MANAGER];
+    const allowOverride = overrideRoles.includes(user.role) && !!body.overrideConflict;
 
     const updated = await prisma.$transaction(async (tx) => {
       await assertNoConflict(
