@@ -1,0 +1,137 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  CONCIERGE
+  COUNCIL
+  PROPERTY_MANAGER
+}
+
+enum MoveType {
+  MOVE_IN
+  MOVE_OUT
+  DELIVERY
+}
+
+enum BookingStatus {
+  SUBMITTED
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+enum NotifyEvent {
+  APPROVED
+  REJECTED
+  SUBMITTED
+}
+
+model User {
+  id           String     @id @default(uuid()) @db.Uuid
+  name         String
+  email        String     @unique
+  role         UserRole
+  passwordHash String     @map("password_hash")
+  createdAt    DateTime   @default(now()) @map("created_at")
+  bookings     Booking[]  @relation("CreatedBookings")
+  approvals    Booking[]  @relation("ApprovedBookings")
+  auditLogs    AuditLog[]
+
+  @@map("users")
+}
+
+model Booking {
+  id                 String        @id @default(uuid()) @db.Uuid
+  createdById        String        @map("created_by") @db.Uuid
+  residentName       String        @map("resident_name")
+  residentEmail      String        @map("resident_email")
+  residentPhone      String        @map("resident_phone")
+  unit               String
+  companyName        String?       @map("company_name")
+  moveType           MoveType      @map("move_type")
+  moveDate           DateTime      @db.Date @map("move_date")
+  startDatetime      DateTime      @map("start_datetime")
+  endDatetime        DateTime      @map("end_datetime")
+  elevatorRequired   Boolean       @default(false) @map("elevator_required")
+  loadingBayRequired Boolean       @default(false) @map("loading_bay_required")
+  notes              String?
+  status             BookingStatus @default(SUBMITTED)
+  approvedById       String?       @map("approved_by") @db.Uuid
+  approvedAt         DateTime?     @map("approved_at")
+  publicUnitMask     String?       @map("public_unit_mask")
+  createdAt          DateTime      @default(now()) @map("created_at")
+  updatedAt          DateTime      @updatedAt @map("updated_at")
+
+  createdBy User      @relation("CreatedBookings", fields: [createdById], references: [id])
+  approvedBy User?    @relation("ApprovedBookings", fields: [approvedById], references: [id])
+  documents  Document[]
+  auditLogs  AuditLog[]
+
+  @@index([startDatetime])
+  @@index([status])
+  @@index([moveDate])
+  @@map("bookings")
+}
+
+model Document {
+  id           String   @id @default(uuid()) @db.Uuid
+  bookingId    String   @map("booking_id") @db.Uuid
+  originalName String   @map("original_name")
+  storagePath  String   @map("storage_path")
+  mimeType     String   @map("mime_type")
+  uploadedAt   DateTime @default(now()) @map("uploaded_at")
+
+  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  @@map("documents")
+}
+
+model NotificationRecipient {
+  id        String        @id @default(uuid()) @db.Uuid
+  name      String?
+  email     String
+  enabled   Boolean       @default(true)
+  notifyOn  NotifyEvent[] @map("notify_on")
+  createdAt DateTime      @default(now()) @map("created_at")
+  updatedAt DateTime      @updatedAt @map("updated_at")
+
+  @@map("notification_recipients")
+}
+
+model AppSetting {
+  id                                          String   @id @default(uuid()) @db.Uuid
+  smtpHost                                    String?  @map("smtp_host")
+  smtpPort                                    Int?     @map("smtp_port")
+  smtpSecure                                  Boolean  @default(false) @map("smtp_secure")
+  smtpUsername                                String?  @map("smtp_username")
+  smtpPasswordEncrypted                       String?  @map("smtp_password_encrypted")
+  fromName                                    String?  @map("from_name")
+  fromEmail                                   String?  @map("from_email")
+  includeResidentContactInApprovalEmails      Boolean  @default(false) @map("include_resident_contact_in_approval_emails")
+  reminderEnabled                             Boolean  @default(true) @map("reminder_enabled")
+  createdAt                                   DateTime @default(now()) @map("created_at")
+  updatedAt                                   DateTime @updatedAt @map("updated_at")
+
+  @@map("app_settings")
+}
+
+model AuditLog {
+  id          String    @id @default(uuid()) @db.Uuid
+  actorUserId String    @map("actor_user_id") @db.Uuid
+  action      String
+  bookingId   String?   @map("booking_id") @db.Uuid
+  metadataJson Json?    @map("metadata_json")
+  timestamp   DateTime  @default(now())
+
+  actor   User     @relation(fields: [actorUserId], references: [id])
+  booking Booking? @relation(fields: [bookingId], references: [id])
+
+  @@map("audit_log")
+}
