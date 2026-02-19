@@ -2,6 +2,7 @@ import { FastifyInstance } from 'fastify';
 import { BookingStatus, MoveType, UserRole } from '@prisma/client';
 import { z } from 'zod';
 import bcrypt from 'bcryptjs';
+import { stringify } from 'csv-stringify/sync';
 import { prisma } from '../prisma.js';
 import { config } from '../config.js';
 import { assertNoConflict } from '../services/conflictService.js';
@@ -13,13 +14,20 @@ const intakeSchema = z.object({
   residentPhone: z.string().min(1),
   unit: z.string().min(1),
   moveType: z.nativeEnum(MoveType),
-  moveDate: z.string(),
-  startDatetime: z.string(),
-  endDatetime: z.string(),
+  moveDate: z.coerce.date(),
+  startDatetime: z.coerce.date(),
+  endDatetime: z.coerce.date(),
   elevatorRequired: z.boolean(),
   loadingBayRequired: z.boolean(),
   notes: z.string().optional()
 });
+
+function sanitizeCsvValue(value: string) {
+  if (value.startsWith('=') || value.startsWith('+') || value.startsWith('-') || value.startsWith('@')) {
+    return `'${value}`;
+  }
+  return value;
+}
 
 export async function systemRoutes(app: FastifyInstance) {
   app.post('/api/auth/login', async (req, reply) => {
@@ -41,16 +49,13 @@ export async function systemRoutes(app: FastifyInstance) {
     const booking = await prisma.$transaction(async (tx) => {
       await assertNoConflict(
         tx,
-        { startDatetime: new Date(body.startDatetime), endDatetime: new Date(body.endDatetime), elevatorRequired: body.elevatorRequired },
+        { startDatetime: body.startDatetime, endDatetime: body.endDatetime, elevatorRequired: body.elevatorRequired },
         false
       );
       return tx.booking.create({
         data: {
           ...body,
           createdById: concierge.id,
-          moveDate: new Date(body.moveDate),
-          startDatetime: new Date(body.startDatetime),
-          endDatetime: new Date(body.endDatetime),
           status: BookingStatus.PENDING
         }
       });
@@ -61,11 +66,19 @@ export async function systemRoutes(app: FastifyInstance) {
 
   app.get('/api/admin/bookings/export.csv', { preHandler: [requireRole([UserRole.CONCIERGE, UserRole.COUNCIL, UserRole.PROPERTY_MANAGER])] }, async (_, reply) => {
     const rows = await prisma.booking.findMany({ orderBy: { moveDate: 'asc' } });
-    const lines = ['id,resident_name,unit,move_type,status,start_datetime,end_datetime'];
-    rows.forEach((r) => {
-      lines.push(`${r.id},${r.residentName},${r.unit},${r.moveType},${r.status},${r.startDatetime.toISOString()},${r.endDatetime.toISOString()}`);
-    });
+    const csv = stringify(
+      rows.map((r) => ({
+        id: r.id,
+        resident_name: sanitizeCsvValue(r.residentName),
+        unit: sanitizeCsvValue(r.unit),
+        move_type: r.moveType,
+        status: r.status,
+        start_datetime: r.startDatetime.toISOString(),
+        end_datetime: r.endDatetime.toISOString()
+      })),
+      { header: true }
+    );
     reply.header('content-type', 'text/csv');
-    return lines.join('\n');
+    return csv;
   });
 }

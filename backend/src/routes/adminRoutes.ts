@@ -25,7 +25,19 @@ export async function adminRoutes(app: FastifyInstance) {
   });
 
   app.put('/api/admin/settings', { preHandler: [requireRole([UserRole.COUNCIL, UserRole.PROPERTY_MANAGER])] }, async (req) => {
-    const body = z.object({ smtpHost: z.string().nullable(), smtpPort: z.number().nullable(), smtpSecure: z.boolean(), smtpUsername: z.string().nullable(), smtpPassword: z.string().optional(), fromName: z.string().nullable(), fromEmail: z.string().nullable(), includeResidentContactInApprovalEmails: z.boolean(), reminderEnabled: z.boolean() }).parse(req.body);
+    const body = z
+      .object({
+        smtpHost: z.string().nullable(),
+        smtpPort: z.union([z.coerce.number().int().positive(), z.null()]),
+        smtpSecure: z.boolean(),
+        smtpUsername: z.string().nullable(),
+        smtpPassword: z.string().optional(),
+        fromName: z.string().nullable(),
+        fromEmail: z.string().nullable(),
+        includeResidentContactInApprovalEmails: z.boolean(),
+        reminderEnabled: z.boolean()
+      })
+      .parse(req.body);
     const existing = await prisma.appSetting.findFirst();
     const updated = existing
       ? await prisma.appSetting.update({ where: { id: existing.id }, data: { ...body, smtpPasswordEncrypted: body.smtpPassword ? encrypt(body.smtpPassword) : undefined } })
@@ -40,6 +52,7 @@ export async function adminRoutes(app: FastifyInstance) {
       await sendEmail(prisma, body.to, 'MoveCal SMTP Test', '<p>SMTP settings are working.</p>');
       return { ok: true };
     } catch (error) {
+      req.log.error(error);
       return reply.status(400).send({ ok: false, message: 'SMTP test failed' });
     }
   });

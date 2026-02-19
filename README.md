@@ -41,13 +41,33 @@ Production-ready starter for Strata Move-In/Move-Out + Elevator Booking.
 - JWT_SECRET
 - SETTINGS_ENCRYPTION_KEY
 - INTAKE_SHARED_SECRET
-- FRONTEND_URL
+- FRONTEND_URL (comma-separated list of allowed origins)
 - UPLOADS_DIR
+- NODE_ENV (set to `production` in Coolify)
 
 ## Test
 ```bash
 npm test
 ```
+
+## Coolify deployment checklist
+- Set `NODE_ENV=production` for backend service.
+- Backend env vars required in production:
+  - `DATABASE_URL`
+  - `JWT_SECRET`
+  - `SETTINGS_ENCRYPTION_KEY` (32+ chars)
+  - `INTAKE_SHARED_SECRET`
+  - `FRONTEND_URL` (comma-separated allowed origins)
+  - `UPLOADS_DIR`
+- Frontend env vars:
+  - `VITE_API_URL` (public URL of backend)
+- Run Prisma migrations during deploy:
+  - `npm run prisma:generate -w backend`
+  - `npm run prisma:migrate -w backend`
+- Seed initial users (once):
+  - `npx tsx backend/src/seed.ts`
+- Ensure uploads storage is persisted/mounted for `UPLOADS_DIR`.
+- Health check path: `GET /health` on backend.
 
 ## Key features implemented
 - Public approved-bookings calendar endpoint

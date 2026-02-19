@@ -4,9 +4,9 @@ import { api, setToken } from '../api';
 const emptyRecipient = { name: '', email: '', enabled: true, notifyOn: ['APPROVED'] };
 
 export function AdminPage() {
-  const [token, updateToken] = useState('');
-  const [email, setEmail] = useState('manager@strata.local');
-  const [password, setPassword] = useState('ChangeMe123!');
+  const [token, updateToken] = useState(() => localStorage.getItem('movecal_token') ?? '');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [bookings, setBookings] = useState<any[]>([]);
   const [stats, setStats] = useState<any>();
   const [recipients, setRecipients] = useState<any[]>([]);
@@ -31,6 +31,7 @@ export function AdminPage() {
     const { data } = await api.post('/api/auth/login', { email, password });
     updateToken(data.token);
     setToken(data.token);
+    localStorage.setItem('movecal_token', data.token);
   };
 
   useEffect(() => {
@@ -52,7 +53,12 @@ export function AdminPage() {
 
   const saveSettings = async (e: FormEvent) => {
     e.preventDefault();
-    await api.put('/api/admin/settings', settings);
+    const portValue = settings.smtpPort === '' || settings.smtpPort === null ? null : Number(settings.smtpPort);
+    const payload = {
+      ...settings,
+      smtpPort: Number.isNaN(portValue) ? null : portValue
+    };
+    await api.put('/api/admin/settings', payload);
     refresh();
   };
 
@@ -64,7 +70,7 @@ export function AdminPage() {
     return (
       <form onSubmit={login}>
         <h2>Admin Login</h2>
-        <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email" />
+        <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email" />
         <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Password" />
         <button>Login</button>
       </form>
@@ -74,6 +80,15 @@ export function AdminPage() {
   return (
     <div>
       <h2>Dashboard</h2>
+      <button
+        onClick={() => {
+          updateToken('');
+          setToken();
+          localStorage.removeItem('movecal_token');
+        }}
+      >
+        Logout
+      </button>
       <pre>{JSON.stringify(stats, null, 2)}</pre>
 
       <h3>Bookings</h3>
@@ -98,7 +113,7 @@ export function AdminPage() {
       <h3>SMTP Settings</h3>
       <form onSubmit={saveSettings}>
         <input placeholder="SMTP Host" value={settings.smtpHost ?? ''} onChange={(e) => setSettings({ ...settings, smtpHost: e.target.value })} />
-        <input placeholder="SMTP Port" value={settings.smtpPort ?? ''} onChange={(e) => setSettings({ ...settings, smtpPort: Number(e.target.value) })} />
+        <input type="number" placeholder="SMTP Port" value={settings.smtpPort ?? ''} onChange={(e) => setSettings({ ...settings, smtpPort: e.target.value })} />
         <input placeholder="SMTP Username" value={settings.smtpUsername ?? ''} onChange={(e) => setSettings({ ...settings, smtpUsername: e.target.value })} />
         <input type="password" placeholder="SMTP Password" value={settings.smtpPassword ?? ''} onChange={(e) => setSettings({ ...settings, smtpPassword: e.target.value })} />
         <input placeholder="From Name" value={settings.fromName ?? ''} onChange={(e) => setSettings({ ...settings, fromName: e.target.value })} />

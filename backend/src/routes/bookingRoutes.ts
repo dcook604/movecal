@@ -4,6 +4,7 @@ import dayjs from 'dayjs';
 import { z } from 'zod';
 import path from 'path';
 import fs from 'fs/promises';
+import { nanoid } from 'nanoid';
 import { prisma } from '../prisma.js';
 import { assertNoConflict } from '../services/conflictService.js';
 import { requireAuth, requireRole } from '../middleware/auth.js';
@@ -18,9 +19,9 @@ const createSchema = z.object({
   unit: z.string().min(1),
   moveType: z.nativeEnum(MoveType),
   companyName: z.string().optional(),
-  moveDate: z.string(),
-  startDatetime: z.string(),
-  endDatetime: z.string(),
+  moveDate: z.coerce.date(),
+  startDatetime: z.coerce.date(),
+  endDatetime: z.coerce.date(),
   elevatorRequired: z.boolean(),
   loadingBayRequired: z.boolean(),
   notes: z.string().optional(),
@@ -36,7 +37,7 @@ export async function bookingRoutes(app: FastifyInstance) {
     const booking = await prisma.$transaction(async (tx) => {
       await assertNoConflict(
         tx,
-        { startDatetime: new Date(body.startDatetime), endDatetime: new Date(body.endDatetime), elevatorRequired: body.elevatorRequired },
+        { startDatetime: body.startDatetime, endDatetime: body.endDatetime, elevatorRequired: body.elevatorRequired },
         false
       );
       return tx.booking.create({
@@ -48,9 +49,9 @@ export async function bookingRoutes(app: FastifyInstance) {
           unit: body.unit,
           companyName: body.companyName,
           moveType: body.moveType,
-          moveDate: new Date(body.moveDate),
-          startDatetime: new Date(body.startDatetime),
-          endDatetime: new Date(body.endDatetime),
+          moveDate: body.moveDate,
+          startDatetime: body.startDatetime,
+          endDatetime: body.endDatetime,
           elevatorRequired: body.elevatorRequired,
           loadingBayRequired: body.loadingBayRequired,
           notes: body.notes,
@@ -74,7 +75,7 @@ export async function bookingRoutes(app: FastifyInstance) {
     const booking = await prisma.$transaction(async (tx) => {
       await assertNoConflict(
         tx,
-        { startDatetime: new Date(body.startDatetime), endDatetime: new Date(body.endDatetime), elevatorRequired: body.elevatorRequired },
+        { startDatetime: body.startDatetime, endDatetime: body.endDatetime, elevatorRequired: body.elevatorRequired },
         allowOverride
       );
 
@@ -87,9 +88,9 @@ export async function bookingRoutes(app: FastifyInstance) {
           unit: body.unit,
           companyName: body.companyName,
           moveType: body.moveType,
-          moveDate: new Date(body.moveDate),
-          startDatetime: new Date(body.startDatetime),
-          endDatetime: new Date(body.endDatetime),
+          moveDate: body.moveDate,
+          startDatetime: body.startDatetime,
+          endDatetime: body.endDatetime,
           elevatorRequired: body.elevatorRequired,
           loadingBayRequired: body.loadingBayRequired,
           notes: body.notes,
@@ -105,18 +106,20 @@ export async function bookingRoutes(app: FastifyInstance) {
     return booking;
   });
 
-  app.get('/api/bookings/:id', async (req) => prisma.booking.findUnique({ where: { id: (req.params as { id: string }).id } }));
+  app.get('/api/bookings/:id', { preHandler: [requireAuth] }, async (req) => prisma.booking.findUnique({ where: { id: (req.params as { id: string }).id } }));
 
-  app.get('/api/admin/bookings', { preHandler: [requireAuth] }, async () =>
-    prisma.booking.findMany({ include: { documents: true }, orderBy: { startDatetime: 'asc' } })
+  app.get(
+    '/api/admin/bookings',
+    { preHandler: [requireRole([UserRole.CONCIERGE, UserRole.COUNCIL, UserRole.PROPERTY_MANAGER])] },
+    async () => prisma.booking.findMany({ include: { documents: true }, orderBy: { startDatetime: 'asc' } })
   );
 
   app.patch('/api/admin/bookings/:id', { preHandler: [requireRole([UserRole.CONCIERGE, UserRole.COUNCIL, UserRole.PROPERTY_MANAGER])] }, async (req) => {
     const body = z
       .object({
         status: z.nativeEnum(BookingStatus).optional(),
-        startDatetime: z.string().optional(),
-        endDatetime: z.string().optional(),
+        startDatetime: z.coerce.date().optional(),
+        endDatetime: z.coerce.date().optional(),
         overrideConflict: z.boolean().optional()
       })
       .parse(req.body);
@@ -131,8 +134,8 @@ export async function bookingRoutes(app: FastifyInstance) {
         tx,
         {
           id: existing.id,
-          startDatetime: new Date(body.startDatetime ?? existing.startDatetime),
-          endDatetime: new Date(body.endDatetime ?? existing.endDatetime),
+          startDatetime: body.startDatetime ?? existing.startDatetime,
+          endDatetime: body.endDatetime ?? existing.endDatetime,
           elevatorRequired: existing.elevatorRequired
         },
         allowOverride
@@ -142,8 +145,8 @@ export async function bookingRoutes(app: FastifyInstance) {
         where: { id: existing.id },
         data: {
           status: body.status ?? existing.status,
-          startDatetime: body.startDatetime ? new Date(body.startDatetime) : undefined,
-          endDatetime: body.endDatetime ? new Date(body.endDatetime) : undefined,
+          startDatetime: body.startDatetime ?? undefined,
+          endDatetime: body.endDatetime ?? undefined,
           approvedById: body.status === BookingStatus.APPROVED ? user.id : undefined,
           approvedAt: body.status === BookingStatus.APPROVED ? new Date() : undefined
         }
@@ -170,14 +173,17 @@ export async function bookingRoutes(app: FastifyInstance) {
     return updated;
   });
 
-  app.post('/api/admin/bookings/:id/documents', { preHandler: [requireAuth] }, async (req) => {
+  app.post('/api/admin/bookings/:id/documents', { preHandler: [requireRole([UserRole.CONCIERGE, UserRole.COUNCIL, UserRole.PROPERTY_MANAGER])] }, async (req) => {
     const data = await req.file();
     if (!data) throw new Error('No file');
     const id = (req.params as { id: string }).id;
-    await fs.mkdir(config.uploadsDir, { recursive: true });
-    const name = `${Date.now()}-${data.filename}`;
-    const storagePath = path.join(config.uploadsDir, name);
+    const uploadsRoot = path.resolve(config.uploadsDir);
+    await fs.mkdir(uploadsRoot, { recursive: true });
+    const safeName = path.basename(data.filename);
+    const ext = path.extname(safeName);
+    const name = `${Date.now()}-${nanoid(8)}${ext}`;
+    const storagePath = path.join(uploadsRoot, name);
     await fs.writeFile(storagePath, await data.toBuffer());
-    return prisma.document.create({ data: { bookingId: id, originalName: data.filename, storagePath, mimeType: data.mimetype } });
+    return prisma.document.create({ data: { bookingId: id, originalName: safeName, storagePath, mimeType: data.mimetype } });
   });
 }
