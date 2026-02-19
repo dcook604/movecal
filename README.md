@@ -51,6 +51,7 @@ npm test
 ```
 
 ## Coolify deployment checklist
+- This Dockerfile builds the backend only. Deploy frontend as a separate Coolify service using `frontend/` (Vite build).
 - Set `NODE_ENV=production` for backend service.
 - Backend env vars required in production:
   - `DATABASE_URL`
