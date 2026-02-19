@@ -2,15 +2,21 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 
+ARG VITE_API_URL
+ENV VITE_API_URL=$VITE_API_URL
+
 COPY package.json package.json
 COPY backend/package.json backend/package.json
+COPY frontend/package.json frontend/package.json
 
-RUN npm install -w backend
+RUN npm install
 
 COPY backend backend
+COPY frontend frontend
 
 RUN npm run prisma:generate -w backend
 RUN npm run build -w backend
+RUN npm run build -w frontend
 
 FROM node:20-alpine
 
@@ -20,6 +26,8 @@ ENV NODE_ENV=production
 COPY --from=builder /app/backend/dist backend/dist
 COPY --from=builder /app/backend/prisma backend/prisma
 COPY --from=builder /app/backend/node_modules backend/node_modules
+COPY --from=builder /app/frontend/dist frontend/dist
+COPY --from=builder /app/node_modules node_modules
 COPY --from=builder /app/backend/package.json backend/package.json
 COPY --from=builder /app/package.json package.json
 COPY docker-entrypoint.sh /app/docker-entrypoint.sh

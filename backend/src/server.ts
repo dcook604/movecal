@@ -50,6 +50,22 @@ const uploadsRoot = path.resolve(config.uploadsDir);
 await fs.mkdir(uploadsRoot, { recursive: true });
 await app.register(staticPlugin, { root: uploadsRoot, prefix: '/uploads/' });
 
+const frontendDist = path.resolve('frontend', 'dist');
+const hasFrontend = await fs
+  .access(frontendDist)
+  .then(() => true)
+  .catch(() => false);
+
+if (hasFrontend) {
+  await app.register(staticPlugin, { root: frontendDist, prefix: '/' });
+  app.setNotFoundHandler(async (req, reply) => {
+    if (req.raw.url?.startsWith('/api') || req.raw.url?.startsWith('/uploads/')) {
+      return reply.status(404).send({ message: 'Not Found' });
+    }
+    return reply.sendFile('index.html');
+  });
+}
+
 await app.register(publicRoutes);
 await app.register(bookingRoutes);
 await app.register(adminRoutes);

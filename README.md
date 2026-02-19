@@ -51,7 +51,8 @@ npm test
 ```
 
 ## Coolify deployment checklist
-- This Dockerfile builds the backend only. Deploy frontend as a separate Coolify service using `frontend/` (Vite build).
+- This Dockerfile builds a single image that serves backend APIs and the frontend SPA.
+- Frontend is served from the backend container at the same domain.
 - Set `NODE_ENV=production` for backend service.
 - Backend env vars required in production:
   - `DATABASE_URL`
@@ -61,7 +62,8 @@ npm test
   - `FRONTEND_URL` (comma-separated allowed origins)
   - `UPLOADS_DIR`
 - Frontend env vars:
-  - `VITE_API_URL` (public URL of backend)
+  - `VITE_API_URL` (public URL of backend, same domain)
+  - Ensure `VITE_API_URL` is provided as a build arg in Coolify so Vite sees it at build time.
 - Run Prisma migrations during deploy:
   - `npm run prisma:generate -w backend`
   - `npm run prisma:migrate -w backend`
