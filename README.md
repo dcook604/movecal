@@ -16,6 +16,7 @@ Production-ready starter for Strata Move-In/Move-Out + Elevator Booking.
 2. Configure env:
    ```bash
    cp backend/.env.example backend/.env
+   cp frontend/.env.example frontend/.env
    ```
 3. Run Postgres and set `DATABASE_URL` (example):
    ```
@@ -44,6 +45,9 @@ Production-ready starter for Strata Move-In/Move-Out + Elevator Booking.
 - FRONTEND_URL (comma-separated list of allowed origins)
 - UPLOADS_DIR
 - NODE_ENV (set to `production` in Coolify)
+
+## Env vars (frontend)
+- VITE_API_URL (backend base URL, required for production build)
 
 ## Test
 ```bash
