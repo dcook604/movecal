@@ -1,5 +1,5 @@
 import { FastifyInstance } from 'fastify';
-import { NotifyEvent, UserRole } from '@prisma/client';
+import { BookingStatus, NotifyEvent, UserRole } from '@prisma/client';
 import { z } from 'zod';
 import { prisma } from '../prisma.js';
 import { requireRole } from '../middleware/auth.js';
