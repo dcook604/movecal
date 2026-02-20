@@ -41,9 +41,11 @@ export async function adminRoutes(app: FastifyInstance) {
       })
       .parse(req.body);
     const existing = await prisma.appSetting.findFirst();
+    const { smtpPassword, ...restBody } = body;
+    const updatedData = { ...restBody, smtpPasswordEncrypted: smtpPassword ? encrypt(smtpPassword) : undefined };
     const updated = existing
-      ? await prisma.appSetting.update({ where: { id: existing.id }, data: { ...body, smtpPasswordEncrypted: body.smtpPassword ? encrypt(body.smtpPassword) : undefined } })
-      : await prisma.appSetting.create({ data: { ...body, smtpPasswordEncrypted: body.smtpPassword ? encrypt(body.smtpPassword) : undefined } });
+      ? await prisma.appSetting.update({ where: { id: existing.id }, data: updatedData })
+      : await prisma.appSetting.create({ data: updatedData });
     await logAudit(prisma, req.user.id, 'SETTINGS_UPDATED', undefined, { smtpHost: body.smtpHost, fromEmail: body.fromEmail });
     return { ...updated, smtpPasswordEncrypted: undefined };
   });

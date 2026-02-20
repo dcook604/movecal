@@ -6,12 +6,13 @@ import '../styles/resident.css';
 // ── Time slot definitions ─────────────────────────────────────
 type Slot = { label: string; start: string; end: string };
 
-const WEEKDAY_SLOTS: Slot[] = [
+// Fixed 3-hour slots for MOVE_IN / MOVE_OUT
+const MOVE_WEEKDAY_SLOTS: Slot[] = [
   { label: '10:00 AM – 1:00 PM', start: '10:00', end: '13:00' },
   { label: '1:00 PM – 4:00 PM',  start: '13:00', end: '16:00' },
 ];
 
-const WEEKEND_SLOTS: Slot[] = [
+const MOVE_WEEKEND_SLOTS: Slot[] = [
   { label: '8:00 AM – 11:00 AM', start: '08:00', end: '11:00' },
   { label: '11:00 AM – 2:00 PM', start: '11:00', end: '14:00' },
   { label: '2:00 PM – 5:00 PM',  start: '14:00', end: '17:00' },
@@ -27,11 +28,50 @@ const STATUTORY_HOLIDAYS = new Set([
   '2026-11-11','2026-12-25','2026-12-26',
 ]);
 
-function getSlotsForDate(dateStr: string): Slot[] | null {
+function minsToTimeStr(mins: number): string {
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+}
+
+function minsToLabel(mins: number): string {
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  const period = h < 12 ? 'AM' : 'PM';
+  const h12 = h % 12 === 0 ? 12 : h % 12;
+  return `${h12}:${String(m).padStart(2, '0')} ${period}`;
+}
+
+function generateTimeSlots(rangeStartMins: number, rangeEndMins: number, blockMins: number): Slot[] {
+  const slots: Slot[] = [];
+  for (let s = rangeStartMins; s + blockMins <= rangeEndMins; s += blockMins) {
+    slots.push({
+      label: `${minsToLabel(s)} – ${minsToLabel(s + blockMins)}`,
+      start: minsToTimeStr(s),
+      end:   minsToTimeStr(s + blockMins),
+    });
+  }
+  return slots;
+}
+
+function getSlotsForDateAndType(dateStr: string, moveType: string): Slot[] | null {
   if (!dateStr) return null;
   if (STATUTORY_HOLIDAYS.has(dateStr)) return []; // holiday — no slots
   const dow = dayjs(dateStr).day(); // 0 Sun, 6 Sat
-  return dow === 0 || dow === 6 ? WEEKEND_SLOTS : WEEKDAY_SLOTS;
+  const isWeekend = dow === 0 || dow === 6;
+
+  if (moveType === 'DELIVERY') {
+    const [rangeStart, rangeEnd] = isWeekend ? [8 * 60, 17 * 60] : [10 * 60, 16 * 60];
+    return generateTimeSlots(rangeStart, rangeEnd, 30);
+  }
+
+  if (moveType === 'RENO') {
+    const [rangeStart, rangeEnd] = isWeekend ? [8 * 60, 17 * 60] : [10 * 60, 16 * 60];
+    return generateTimeSlots(rangeStart, rangeEnd, 60);
+  }
+
+  // MOVE_IN / MOVE_OUT: fixed half-day slots
+  return isWeekend ? MOVE_WEEKEND_SLOTS : MOVE_WEEKDAY_SLOTS;
 }
 
 export function ResidentSubmissionPage() {
@@ -42,12 +82,17 @@ export function ResidentSubmissionPage() {
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const availableSlots = getSlotsForDate(form.moveDate ?? '');
+  const availableSlots = getSlotsForDateAndType(form.moveDate ?? '', form.moveType ?? 'MOVE_IN');
   const isHoliday = form.moveDate && availableSlots !== null && availableSlots.length === 0;
 
   const handleDateChange = (dateStr: string) => {
     setForm({ ...form, moveDate: dateStr });
-    setSlot(''); // reset slot when date changes
+    setSlot('');
+  };
+
+  const handleMoveTypeChange = (moveType: string) => {
+    setForm({ ...form, moveType });
+    setSlot('');
   };
 
   const submit = async (e: FormEvent) => {
@@ -59,12 +104,12 @@ export function ResidentSubmissionPage() {
       return;
     }
     if (!form.moveDate) {
-      setError('Please select a move date');
+      setError('Please select a date');
       setMessage('');
       return;
     }
     if (isHoliday) {
-      setError('Moves are not permitted on statutory holidays');
+      setError('Bookings are not permitted on statutory holidays');
       setMessage('');
       return;
     }
@@ -74,7 +119,7 @@ export function ResidentSubmissionPage() {
       return;
     }
     if (!accepted) {
-      setError('You must accept the strata bylaws and move rules before submitting');
+      setError('You must accept the strata bylaws and rules before submitting');
       setMessage('');
       return;
     }
@@ -93,7 +138,7 @@ export function ResidentSubmissionPage() {
     setMessage('');
     try {
       await api.post('/api/bookings', { ...form, startDatetime, endDatetime });
-      setMessage('Move request submitted successfully! Check your email for confirmation.');
+      setMessage('Booking request submitted successfully! Check your email for confirmation.');
       setForm({ moveType: 'MOVE_IN', elevatorRequired: true, loadingBayRequired: false });
       setSlot('');
       setAccepted(false);
@@ -104,31 +149,49 @@ export function ResidentSubmissionPage() {
     }
   };
 
+  const isDeliveryOrReno = form.moveType === 'DELIVERY' || form.moveType === 'RENO';
+  const blockLabel = form.moveType === 'DELIVERY' ? '30-minute blocks' : '1-hour slots';
+
   return (
     <div className="page-container">
       <div className="resident-form-card">
-        <h2 className="resident-form-title">Move Request</h2>
+        <h2 className="resident-form-title">Booking Request</h2>
 
         <div className="move-times-notice">
-          <h3 className="move-times-heading">Permitted Move Times</h3>
-          <div className="move-times-grid">
-            <div>
-              <strong>Monday – Friday</strong>
-              <ul className="move-times-list">
-                <li>10:00 AM – 1:00 PM</li>
-                <li>1:00 PM – 4:00 PM</li>
-              </ul>
+          <h3 className="move-times-heading">Permitted Times</h3>
+          {isDeliveryOrReno ? (
+            <div className="move-times-grid">
+              <div>
+                <strong>Monday – Friday</strong>
+                <p style={{ margin: '4px 0 2px' }}>10:00 AM – 4:00 PM</p>
+                <small>{blockLabel}</small>
+              </div>
+              <div>
+                <strong>Saturday &amp; Sunday</strong>
+                <p style={{ margin: '4px 0 2px' }}>8:00 AM – 5:00 PM</p>
+                <small>{blockLabel}</small>
+              </div>
             </div>
-            <div>
-              <strong>Saturday &amp; Sunday</strong>
-              <ul className="move-times-list">
-                <li>8:00 AM – 11:00 AM</li>
-                <li>11:00 AM – 2:00 PM</li>
-                <li>2:00 PM – 5:00 PM</li>
-              </ul>
+          ) : (
+            <div className="move-times-grid">
+              <div>
+                <strong>Monday – Friday</strong>
+                <ul className="move-times-list">
+                  <li>10:00 AM – 1:00 PM</li>
+                  <li>1:00 PM – 4:00 PM</li>
+                </ul>
+              </div>
+              <div>
+                <strong>Saturday &amp; Sunday</strong>
+                <ul className="move-times-list">
+                  <li>8:00 AM – 11:00 AM</li>
+                  <li>11:00 AM – 2:00 PM</li>
+                  <li>2:00 PM – 5:00 PM</li>
+                </ul>
+              </div>
             </div>
-          </div>
-          <p className="move-times-holiday">No Moves Permitted on Statutory Holidays</p>
+          )}
+          <p className="move-times-holiday">No Bookings Permitted on Statutory Holidays</p>
         </div>
 
         <form onSubmit={submit}>
@@ -165,12 +228,12 @@ export function ResidentSubmissionPage() {
           </fieldset>
 
           <fieldset className="form-group">
-            <legend className="form-group-legend">Move Details</legend>
+            <legend className="form-group-legend">Booking Details</legend>
 
             <div className="form-field">
-              <label htmlFor="move-type" className="required">Move Type</label>
+              <label htmlFor="move-type" className="required">Booking Type</label>
               <select id="move-type" value={form.moveType}
-                onChange={(e) => setForm({ ...form, moveType: e.target.value })}>
+                onChange={(e) => handleMoveTypeChange(e.target.value)}>
                 <option value="MOVE_IN">Move In</option>
                 <option value="MOVE_OUT">Move Out</option>
                 <option value="DELIVERY">Delivery</option>
@@ -179,7 +242,7 @@ export function ResidentSubmissionPage() {
             </div>
 
             <div className="form-field">
-              <label htmlFor="move-date" className="required">Move Date</label>
+              <label htmlFor="move-date" className="required">Date</label>
               <input id="move-date" type="date"
                 value={form.moveDate ?? ''}
                 onChange={(e) => handleDateChange(e.target.value)} />
@@ -187,7 +250,7 @@ export function ResidentSubmissionPage() {
 
             {isHoliday && (
               <p className="error-message slot-holiday-msg">
-                This date is a statutory holiday — no moves are permitted.
+                This date is a statutory holiday — no bookings are permitted.
               </p>
             )}
 
@@ -206,11 +269,6 @@ export function ResidentSubmissionPage() {
                   <option key={s.start} value={s.start}>{s.label}</option>
                 ))}
               </select>
-              {form.moveDate && !isHoliday && availableSlots && (
-                <small>
-                  {availableSlots === WEEKDAY_SLOTS ? 'Weekday slots' : 'Weekend slots'}
-                </small>
-              )}
             </div>
 
             <div className="form-field">
@@ -249,7 +307,7 @@ export function ResidentSubmissionPage() {
           </div>
 
           <button className="btn-full" disabled={isSubmitting || !accepted} type="submit">
-            {isSubmitting ? 'Submitting…' : 'Submit Move Request'}
+            {isSubmitting ? 'Submitting…' : 'Submit Booking Request'}
           </button>
 
           {error   && <p className="error-message">{error}</p>}

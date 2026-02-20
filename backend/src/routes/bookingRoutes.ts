@@ -37,7 +37,7 @@ export async function bookingRoutes(app: FastifyInstance) {
     const body = createSchema.parse(req.body);
 
     // Validate move time restrictions
-    const timeValidation = validateMoveTime(body.startDatetime, body.endDatetime);
+    const timeValidation = validateMoveTime(body.startDatetime, body.endDatetime, body.moveType);
     if (!timeValidation.valid) {
       return reply.status(400).send({ message: timeValidation.error });
     }
@@ -76,7 +76,7 @@ export async function bookingRoutes(app: FastifyInstance) {
       .catch((err) => {
         app.log.error({ err, bookingId: booking.id, event: 'SUBMITTED' }, 'Failed to send notification email');
       });
-    await sendEmail(prisma, body.residentEmail, 'Booking submitted', `<p>Your booking ${booking.id} has been submitted.</p>`)
+    await sendEmail(prisma, body.residentEmail, 'Booking request submitted', `<p>Your booking request ${booking.id} has been submitted and will be reviewed. If no action is taken within 24 hours, it will be automatically approved.</p>`)
       .catch((err) => {
         app.log.error({ err, bookingId: booking.id, email: body.residentEmail }, 'Failed to send booking confirmation email');
       });
@@ -93,7 +93,7 @@ export async function bookingRoutes(app: FastifyInstance) {
     const allowOverride = overrideRoles.includes(user.role);
 
     if (!allowOverride) {
-      const timeValidation = validateMoveTime(body.startDatetime, body.endDatetime);
+      const timeValidation = validateMoveTime(body.startDatetime, body.endDatetime, body.moveType);
       if (!timeValidation.valid) {
         return reply.status(400).send({ message: timeValidation.error });
       }
@@ -164,7 +164,7 @@ export async function bookingRoutes(app: FastifyInstance) {
     if ((body.startDatetime || body.endDatetime) && !allowOverride) {
       const newStart = body.startDatetime ?? existing.startDatetime;
       const newEnd = body.endDatetime ?? existing.endDatetime;
-      const timeValidation = validateMoveTime(newStart, newEnd);
+      const timeValidation = validateMoveTime(newStart, newEnd, existing.moveType);
       if (!timeValidation.valid) {
         return reply.status(400).send({ message: timeValidation.error });
       }

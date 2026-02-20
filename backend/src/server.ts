@@ -15,6 +15,7 @@ import { bookingRoutes } from './routes/bookingRoutes.js';
 import { adminRoutes } from './routes/adminRoutes.js';
 import { systemRoutes } from './routes/systemRoutes.js';
 import { prisma } from './prisma.js';
+import { startAutoApprovalJob } from './services/autoApprovalService.js';
 import { ZodError } from 'zod';
 
 const app = Fastify({ logger: true, bodyLimit: 2 * 1024 * 1024, trustProxy: true });
@@ -96,6 +97,8 @@ await app.register(publicRoutes);
 await app.register(bookingRoutes);
 await app.register(adminRoutes);
 await app.register(systemRoutes);
+
+startAutoApprovalJob();
 
 app.get('/health', async (_req, reply) => {
   try {
