@@ -28,6 +28,9 @@ ENV NODE_ENV=production
 
 RUN apk add --no-cache openssl
 
+# Create non-root user for security
+RUN addgroup -g 1001 -S nodejs && adduser -S nodejs -u 1001
+
 COPY --from=builder /app/backend/dist backend/dist
 COPY --from=builder /app/backend/prisma backend/prisma
 COPY --from=builder /app/frontend/dist frontend/dist
@@ -37,6 +40,10 @@ COPY --from=builder /app/package.json package.json
 COPY docker-entrypoint.sh /app/docker-entrypoint.sh
 
 RUN chmod +x /app/docker-entrypoint.sh
+
+# Set ownership to non-root user and switch
+RUN chown -R nodejs:nodejs /app
+USER nodejs
 
 EXPOSE 4000
 ENTRYPOINT ["/app/docker-entrypoint.sh"]

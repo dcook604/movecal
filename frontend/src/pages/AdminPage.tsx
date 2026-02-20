@@ -35,6 +35,8 @@ export function AdminPage() {
   const [recipients, setRecipients] = useState<any[]>([]);
   const [recipientForm, setRecipientForm] = useState<any>(emptyRecipient);
   const [settings, setSettings] = useState<any>({ smtpSecure: false, includeResidentContactInApprovalEmails: false, reminderEnabled: true });
+  const [isUpdating, setIsUpdating] = useState<string | null>(null);
+  const [actionMessage, setActionMessage] = useState('');
 
   const canManageSettings = role === 'COUNCIL' || role === 'PROPERTY_MANAGER';
 
@@ -91,8 +93,24 @@ export function AdminPage() {
   }, [token]);
 
   const updateStatus = async (id: string, status: string) => {
-    await api.patch(`/api/admin/bookings/${id}`, { status });
-    refresh();
+    const action = status.toLowerCase();
+    if (!confirm(`Are you sure you want to ${action} this booking?`)) {
+      return;
+    }
+
+    setIsUpdating(id);
+    setActionMessage('');
+
+    try {
+      await api.patch(`/api/admin/bookings/${id}`, { status });
+      setActionMessage(`Booking ${action}d successfully`);
+      await refresh();
+    } catch (error: any) {
+      const errorMsg = error.response?.data?.message || `Failed to ${action} booking. Please try again.`;
+      setActionMessage(errorMsg);
+    } finally {
+      setIsUpdating(null);
+    }
   };
 
   const createRecipient = async (e: FormEvent) => {
@@ -101,9 +119,17 @@ export function AdminPage() {
       setLoadError('You do not have permission to manage recipients.');
       return;
     }
-    await api.post('/api/admin/recipients', recipientForm);
-    setRecipientForm(emptyRecipient);
-    refresh();
+
+    setActionMessage('');
+    try {
+      await api.post('/api/admin/recipients', recipientForm);
+      setRecipientForm(emptyRecipient);
+      setActionMessage('Recipient added successfully');
+      await refresh();
+    } catch (error: any) {
+      const errorMsg = error.response?.data?.message || 'Failed to add recipient. Please try again.';
+      setActionMessage(errorMsg);
+    }
   };
 
   const saveSettings = async (e: FormEvent) => {
@@ -112,13 +138,21 @@ export function AdminPage() {
       setLoadError('You do not have permission to update settings.');
       return;
     }
-    const portValue = settings.smtpPort === '' || settings.smtpPort === null ? null : Number(settings.smtpPort);
-    const payload = {
-      ...settings,
-      smtpPort: Number.isNaN(portValue) ? null : portValue
-    };
-    await api.put('/api/admin/settings', payload);
-    refresh();
+
+    setActionMessage('');
+    try {
+      const portValue = settings.smtpPort === '' || settings.smtpPort === null ? null : Number(settings.smtpPort);
+      const payload = {
+        ...settings,
+        smtpPort: Number.isNaN(portValue) ? null : portValue
+      };
+      await api.put('/api/admin/settings', payload);
+      setActionMessage('Settings saved successfully');
+      await refresh();
+    } catch (error: any) {
+      const errorMsg = error.response?.data?.message || 'Failed to save settings. Please try again.';
+      setActionMessage(errorMsg);
+    }
   };
 
   const sendTestEmail = async () => {
@@ -126,7 +160,15 @@ export function AdminPage() {
       setLoadError('You do not have permission to send test email.');
       return;
     }
-    await api.post('/api/admin/settings/test-email', { to: email });
+
+    setActionMessage('');
+    try {
+      await api.post('/api/admin/settings/test-email', { to: email });
+      setActionMessage('Test email sent successfully');
+    } catch (error: any) {
+      const errorMsg = error.response?.data?.message || 'Failed to send test email. Please check SMTP settings.';
+      setActionMessage(errorMsg);
+    }
   };
 
   if (!token) {
@@ -155,15 +197,37 @@ export function AdminPage() {
       >
         Logout
       </button>
-      {loadError ? <p>{loadError}</p> : null}
-      <pre>{JSON.stringify(stats, null, 2)}</pre>
+      {loadError ? <p className="error-message">{loadError}</p> : null}
+      {actionMessage && <p className={actionMessage.includes('success') ? 'success-message' : 'error-message'}>{actionMessage}</p>}
+
+      <div className="stats-section">
+        <h3>Statistics</h3>
+        {stats && (
+          <div>
+            <p><strong>Total Bookings:</strong> {stats.totalBookings || 0}</p>
+            <p><strong>Approved:</strong> {stats.approvedBookings || 0}</p>
+            <p><strong>Pending:</strong> {stats.pendingBookings || 0}</p>
+            <p><strong>This Month:</strong> {stats.bookingsThisMonth || 0}</p>
+          </div>
+        )}
+      </div>
 
       <h3>Bookings</h3>
       {bookings.map((b) => (
         <div key={b.id}>
           {b.residentName} ({b.unit}) — {b.status}
-          <button onClick={() => updateStatus(b.id, 'APPROVED')}>Approve</button>
-          <button onClick={() => updateStatus(b.id, 'REJECTED')}>Reject</button>
+          <button
+            onClick={() => updateStatus(b.id, 'APPROVED')}
+            disabled={isUpdating === b.id}
+          >
+            {isUpdating === b.id ? 'Processing...' : 'Approve'}
+          </button>
+          <button
+            onClick={() => updateStatus(b.id, 'REJECTED')}
+            disabled={isUpdating === b.id}
+          >
+            {isUpdating === b.id ? 'Processing...' : 'Reject'}
+          </button>
         </div>
       ))}
 

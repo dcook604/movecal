@@ -4,10 +4,35 @@ import { api } from '../api';
 export function ResidentSubmissionPage() {
   const [form, setForm] = useState<any>({ moveType: 'MOVE_IN', elevatorRequired: true, loadingBayRequired: false });
   const [message, setMessage] = useState('');
+  const [error, setError] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
   const submit = async (e: FormEvent) => {
     e.preventDefault();
-    await api.post('/api/bookings', form);
-    setMessage('Submitted');
+
+    // Client-side validation
+    if (!form.residentName || !form.residentEmail || !form.residentPhone ||
+        !form.unit || !form.moveDate || !form.startDatetime || !form.endDatetime) {
+      setError('Please fill in all required fields');
+      setMessage('');
+      return;
+    }
+
+    setIsSubmitting(true);
+    setError('');
+    setMessage('');
+
+    try {
+      await api.post('/api/bookings', form);
+      setMessage('Move request submitted successfully! Check your email for confirmation.');
+      // Reset form after successful submission
+      setForm({ moveType: 'MOVE_IN', elevatorRequired: true, loadingBayRequired: false });
+    } catch (err: any) {
+      const errorMsg = err.response?.data?.message || 'Failed to submit request. Please try again.';
+      setError(errorMsg);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
   return (
     <form onSubmit={submit}>
@@ -69,8 +94,11 @@ export function ResidentSubmissionPage() {
         <input type="checkbox" checked={form.loadingBayRequired} onChange={(e) => setForm({ ...form, loadingBayRequired: e.target.checked })} />
         Loading Bay Required
       </label>
-      <button>Submit</button>
-      <p>{message}</p>
+      <button disabled={isSubmitting} type="submit">
+        {isSubmitting ? 'Submitting...' : 'Submit Move Request'}
+      </button>
+      {error && <p className="error-message">{error}</p>}
+      {message && <p className="success-message">{message}</p>}
     </form>
   );
 }

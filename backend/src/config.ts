@@ -29,8 +29,29 @@ requireProd('SETTINGS_ENCRYPTION_KEY', env.SETTINGS_ENCRYPTION_KEY);
 requireProd('INTAKE_SHARED_SECRET', env.INTAKE_SHARED_SECRET);
 requireProd('FRONTEND_URL', env.FRONTEND_URL);
 
-if (isProd && env.SETTINGS_ENCRYPTION_KEY && env.SETTINGS_ENCRYPTION_KEY.length < 32) {
-  throw new Error('SETTINGS_ENCRYPTION_KEY must be at least 32 characters in production');
+// Validate JWT_SECRET minimum length in production
+if (isProd && env.JWT_SECRET && env.JWT_SECRET.length < 32) {
+  throw new Error(
+    'JWT_SECRET must be at least 32 characters in production. ' +
+    'Generate a strong secret with: openssl rand -base64 32'
+  );
+}
+
+// Validate SETTINGS_ENCRYPTION_KEY is exactly 64 hex characters (32 bytes) in production
+if (isProd && env.SETTINGS_ENCRYPTION_KEY) {
+  if (env.SETTINGS_ENCRYPTION_KEY.length !== 64) {
+    throw new Error(
+      'SETTINGS_ENCRYPTION_KEY must be exactly 64 hex characters (32 bytes) in production. ' +
+      'Generate a valid key with: openssl rand -hex 32'
+    );
+  }
+  // Verify it's valid hex
+  if (!/^[0-9a-fA-F]{64}$/.test(env.SETTINGS_ENCRYPTION_KEY)) {
+    throw new Error(
+      'SETTINGS_ENCRYPTION_KEY must contain only hexadecimal characters (0-9, a-f). ' +
+      'Generate a valid key with: openssl rand -hex 32'
+    );
+  }
 }
 
 const frontendOrigins = (env.FRONTEND_URL ?? 'http://localhost:5173')

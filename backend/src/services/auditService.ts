@@ -1,5 +1,26 @@
 import { PrismaClient } from '@prisma/client';
 
-export async function logAudit(prisma: PrismaClient, actorUserId: string, action: string, bookingId?: string, metadataJson?: unknown) {
-  await prisma.auditLog.create({ data: { actorUserId, action, bookingId, metadataJson: metadataJson as any } });
+/**
+ * Creates an audit log entry with optional metadata.
+ *
+ * @param metadata - Optional metadata object that can include:
+ *   - ip: IP address of the request
+ *   - userAgent: User agent string
+ *   - any other contextual information
+ */
+export async function logAudit(
+  prisma: PrismaClient,
+  actorUserId: string,
+  action: string,
+  bookingId?: string,
+  metadata?: Record<string, any>
+) {
+  await prisma.auditLog.create({
+    data: {
+      actorUserId,
+      action,
+      bookingId,
+      metadataJson: metadata || {}
+    }
+  });
 }

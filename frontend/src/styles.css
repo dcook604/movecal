@@ -2,8 +2,72 @@ body { font-family: Inter, Arial, sans-serif; margin: 0; padding: 16px; backgrou
 nav a { margin-right: 8px; color: #0f172a; text-decoration: none; }
 input, select, button { display: block; margin: 6px 0; padding: 8px; border-radius: 6px; border: 1px solid #cbd5e1; }
 button { cursor: pointer; background: #0ea5e9; color: white; border: none; }
+button:disabled { opacity: 0.6; cursor: not-allowed; }
 h2, h3 { color: #0f172a; }
 .form-field { margin: 8px 0; }
 .form-field label { display: block; margin: 0 0 4px 0; color: #0f172a; font-weight: 600; }
 .checkbox-label { display: flex; align-items: center; gap: 8px; margin: 6px 0; }
 .checkbox-label input[type="checkbox"] { margin: 0; }
+
+/* Accessibility improvements */
+input:focus,
+select:focus,
+button:focus,
+textarea:focus {
+  outline: 2px solid #0066cc;
+  outline-offset: 2px;
+}
+
+.required::after {
+  content: " *";
+  color: #dc2626;
+}
+
+.error-message {
+  color: #dc2626;
+  font-size: 0.875rem;
+  margin-top: 0.25rem;
+  font-weight: 500;
+}
+
+.success-message {
+  color: #16a34a;
+  font-size: 0.875rem;
+  margin-top: 0.25rem;
+  font-weight: 500;
+}
+
+/* Mobile responsive styles */
+@media (max-width: 768px) {
+  .form-field input,
+  .form-field select,
+  .form-field textarea,
+  input,
+  select,
+  textarea {
+    width: 100%;
+    box-sizing: border-box;
+    font-size: 16px; /* Prevent iOS zoom */
+  }
+
+  button {
+    min-height: 44px; /* Accessible touch target */
+    width: 100%;
+  }
+
+  /* Make calendar stack vertically on mobile */
+  .rbc-calendar {
+    height: auto !important;
+    min-height: 400px;
+  }
+
+  nav {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  nav a {
+    margin-right: 0;
+  }
+}

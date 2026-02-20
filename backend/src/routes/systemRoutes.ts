@@ -30,7 +30,15 @@ function sanitizeCsvValue(value: string) {
 }
 
 export async function systemRoutes(app: FastifyInstance) {
-  app.post('/api/auth/login', async (req, reply) => {
+  // Login endpoint with strict rate limiting to prevent brute force attacks
+  app.post('/api/auth/login', {
+    config: {
+      rateLimit: {
+        max: 5,
+        timeWindow: '15 minutes'
+      }
+    }
+  }, async (req, reply) => {
     const body = z.object({ email: z.string().email(), password: z.string().min(1) }).parse(req.body);
     const normalizedEmail = body.email.trim().toLowerCase();
     const user = await prisma.user.findUnique({ where: { email: normalizedEmail } });

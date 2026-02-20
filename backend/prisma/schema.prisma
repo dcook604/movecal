@@ -77,6 +77,8 @@ model Booking {
   @@index([startDatetime])
   @@index([status])
   @@index([moveDate])
+  @@index([status, startDatetime])
+  @@index([createdById, createdAt])
   @@map("bookings")
 }
 

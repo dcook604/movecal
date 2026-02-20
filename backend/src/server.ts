@@ -1,5 +1,7 @@
 import Fastify from 'fastify';
+import cookie from '@fastify/cookie';
 import cors from '@fastify/cors';
+import csrf from '@fastify/csrf-protection';
 import jwt from '@fastify/jwt';
 import helmet from '@fastify/helmet';
 import multipart from '@fastify/multipart';
@@ -28,7 +30,30 @@ app.setErrorHandler((error, _req, reply) => {
   reply.status(statusCode).send({ message });
 });
 
-await app.register(helmet, { contentSecurityPolicy: false });
+await app.register(helmet, {
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-inline'"], // Vite requires unsafe-inline for dev
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      imgSrc: ["'self'", "data:"],
+      connectSrc: ["'self'"],
+      fontSrc: ["'self'"],
+      objectSrc: ["'none'"],
+      mediaSrc: ["'self'"],
+      frameSrc: ["'none'"]
+    }
+  }
+});
+
+// Register cookie plugin (required for CSRF)
+await app.register(cookie, { secret: config.jwtSecret });
+
+// Register CSRF protection for state-changing operations
+await app.register(csrf, {
+  cookieOpts: { signed: true, sameSite: 'strict' }
+});
+
 await app.register(rateLimit, { global: true, max: 300, timeWindow: '1 minute' });
 
 if (config.env === 'development') {
@@ -75,10 +100,11 @@ await app.register(systemRoutes);
 app.get('/health', async (_req, reply) => {
   try {
     await prisma.$queryRaw`SELECT 1`;
-    return { ok: true };
+    return { status: 'healthy', timestamp: new Date().toISOString() };
   } catch (error) {
     app.log.error(error);
-    return reply.status(500).send({ ok: false });
+    reply.status(503);
+    return { status: 'unhealthy', error: 'Database connection failed' };
   }
 });
 

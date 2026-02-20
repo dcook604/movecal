@@ -1,7 +1,14 @@
 import crypto from 'crypto';
 import { config } from '../config.js';
 
-const key = Buffer.from(config.encryptionKey.padEnd(32, '0').slice(0, 32));
+// Parse encryption key from hex string (should be 64 hex chars = 32 bytes)
+const key = Buffer.from(config.encryptionKey, 'hex');
+if (key.length !== 32) {
+  throw new Error(
+    `SETTINGS_ENCRYPTION_KEY must be exactly 32 bytes (64 hex characters). ` +
+    `Got ${key.length} bytes. Generate a valid key with: openssl rand -hex 32`
+  );
+}
 const GCM_PREFIX = 'gcm';
 
 export function encrypt(value: string) {

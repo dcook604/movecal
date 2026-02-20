@@ -13,20 +13,23 @@ import { logAudit } from '../services/auditService.js';
 import { config } from '../config.js';
 
 const createSchema = z.object({
-  residentName: z.string().min(1),
-  residentEmail: z.string().email(),
-  residentPhone: z.string().min(1),
-  unit: z.string().min(1),
+  residentName: z.string().min(1).max(200),
+  residentEmail: z.string().email().max(320), // RFC 5321 max email length
+  residentPhone: z.string().min(1).max(50),
+  unit: z.string().min(1).max(20),
   moveType: z.nativeEnum(MoveType),
-  companyName: z.string().optional(),
+  companyName: z.string().max(200).optional(),
   moveDate: z.coerce.date(),
   startDatetime: z.coerce.date(),
   endDatetime: z.coerce.date(),
   elevatorRequired: z.boolean(),
   loadingBayRequired: z.boolean(),
-  notes: z.string().optional(),
-  publicUnitMask: z.string().optional()
+  notes: z.string().max(2000).optional(),
+  publicUnitMask: z.string().max(20).optional()
 });
+
+// UUID validation schema for ID parameters
+const uuidSchema = z.string().uuid();
 
 export async function bookingRoutes(app: FastifyInstance) {
   app.post('/api/bookings', async (req, reply) => {
@@ -61,8 +64,14 @@ export async function bookingRoutes(app: FastifyInstance) {
       });
     });
 
-    await sendNotificationRecipients(prisma, NotifyEvent.SUBMITTED, 'New booking submitted', `<p>Booking ${booking.id} submitted.</p>`).catch(() => undefined);
-    await sendEmail(prisma, body.residentEmail, 'Booking submitted', `<p>Your booking ${booking.id} has been submitted.</p>`).catch(() => undefined);
+    await sendNotificationRecipients(prisma, NotifyEvent.SUBMITTED, 'New booking submitted', `<p>Booking ${booking.id} submitted.</p>`)
+      .catch((err) => {
+        app.log.error({ err, bookingId: booking.id, event: 'SUBMITTED' }, 'Failed to send notification email');
+      });
+    await sendEmail(prisma, body.residentEmail, 'Booking submitted', `<p>Your booking ${booking.id} has been submitted.</p>`)
+      .catch((err) => {
+        app.log.error({ err, bookingId: booking.id, email: body.residentEmail }, 'Failed to send booking confirmation email');
+      });
 
     return booking;
   });
@@ -107,7 +116,10 @@ export async function bookingRoutes(app: FastifyInstance) {
     return booking;
   });
 
-  app.get('/api/bookings/:id', { preHandler: [requireAuth] }, async (req) => prisma.booking.findUnique({ where: { id: (req.params as { id: string }).id } }));
+  app.get('/api/bookings/:id', { preHandler: [requireAuth] }, async (req) => {
+    const id = uuidSchema.parse((req.params as { id: string }).id);
+    return prisma.booking.findUnique({ where: { id } });
+  });
 
   app.get(
     '/api/admin/bookings',
@@ -126,7 +138,7 @@ export async function bookingRoutes(app: FastifyInstance) {
       .parse(req.body);
 
     const user = req.user;
-    const bookingId = (req.params as { id: string }).id;
+    const bookingId = uuidSchema.parse((req.params as { id: string }).id);
     const existing = await prisma.booking.findUniqueOrThrow({ where: { id: bookingId } });
     const overrideRoles: UserRole[] = [UserRole.COUNCIL, UserRole.PROPERTY_MANAGER];
     const allowOverride = overrideRoles.includes(user.role) && !!body.overrideConflict;
@@ -162,13 +174,22 @@ export async function bookingRoutes(app: FastifyInstance) {
       const includeContact = settings?.includeResidentContactInApprovalEmails;
       const details = `${updated.residentName} (${updated.unit}) ${dayjs(updated.startDatetime).format('MMM D h:mm A')} - ${dayjs(updated.endDatetime).format('h:mm A')}`;
       const contact = includeContact ? `<p>${updated.residentEmail} ${updated.residentPhone}</p>` : '';
-      await sendEmail(prisma, updated.residentEmail, 'Booking approved', `<p>Approved: ${details}</p>${contact}`).catch(() => undefined);
-      await sendNotificationRecipients(prisma, NotifyEvent.APPROVED, 'Booking approved', `<p>${details}</p>${contact}`).catch(() => undefined);
+      await sendEmail(prisma, updated.residentEmail, 'Booking approved', `<p>Approved: ${details}</p>${contact}`)
+        .catch((err) => {
+          app.log.error({ err, bookingId: updated.id, email: updated.residentEmail }, 'Failed to send booking approval email');
+        });
+      await sendNotificationRecipients(prisma, NotifyEvent.APPROVED, 'Booking approved', `<p>${details}</p>${contact}`)
+        .catch((err) => {
+          app.log.error({ err, bookingId: updated.id, event: 'APPROVED' }, 'Failed to send approval notification');
+        });
       await logAudit(prisma, user.id, 'BOOKING_APPROVED', updated.id, { status: updated.status });
     }
 
     if (body.status === BookingStatus.REJECTED) {
-      await sendNotificationRecipients(prisma, NotifyEvent.REJECTED, 'Booking rejected', `<p>Booking ${updated.id} rejected.</p>`).catch(() => undefined);
+      await sendNotificationRecipients(prisma, NotifyEvent.REJECTED, 'Booking rejected', `<p>Booking ${updated.id} rejected.</p>`)
+        .catch((err) => {
+          app.log.error({ err, bookingId: updated.id, event: 'REJECTED' }, 'Failed to send rejection notification');
+        });
       await logAudit(prisma, user.id, 'BOOKING_REJECTED', updated.id, { status: updated.status });
     }
 
@@ -182,7 +203,7 @@ export async function bookingRoutes(app: FastifyInstance) {
     if (!allowedMime.has(data.mimetype)) {
       throw new Error('Unsupported file type');
     }
-    const id = (req.params as { id: string }).id;
+    const id = uuidSchema.parse((req.params as { id: string }).id);
     const uploadsRoot = path.resolve(config.uploadsDir);
     await fs.mkdir(uploadsRoot, { recursive: true });
     const safeName = path.basename(data.filename);
