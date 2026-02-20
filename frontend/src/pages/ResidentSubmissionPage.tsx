@@ -1,21 +1,75 @@
 import { FormEvent, useState } from 'react';
+import dayjs from 'dayjs';
 import { api } from '../api';
 import '../styles/resident.css';
 
+// ── Time slot definitions ─────────────────────────────────────
+type Slot = { label: string; start: string; end: string };
+
+const WEEKDAY_SLOTS: Slot[] = [
+  { label: '10:00 AM – 1:00 PM', start: '10:00', end: '13:00' },
+  { label: '1:00 PM – 4:00 PM',  start: '13:00', end: '16:00' },
+];
+
+const WEEKEND_SLOTS: Slot[] = [
+  { label: '8:00 AM – 11:00 AM', start: '08:00', end: '11:00' },
+  { label: '11:00 AM – 2:00 PM', start: '11:00', end: '14:00' },
+  { label: '2:00 PM – 5:00 PM',  start: '14:00', end: '17:00' },
+];
+
+// Canadian statutory holidays 2025–2026 (mirrors backend list)
+const STATUTORY_HOLIDAYS = new Set([
+  '2025-01-01','2025-02-17','2025-04-18','2025-05-19',
+  '2025-07-01','2025-08-04','2025-09-01','2025-10-13',
+  '2025-11-11','2025-12-25','2025-12-26',
+  '2026-01-01','2026-02-16','2026-04-03','2026-05-18',
+  '2026-07-01','2026-08-03','2026-09-07','2026-10-12',
+  '2026-11-11','2026-12-25','2026-12-26',
+]);
+
+function getSlotsForDate(dateStr: string): Slot[] | null {
+  if (!dateStr) return null;
+  if (STATUTORY_HOLIDAYS.has(dateStr)) return []; // holiday — no slots
+  const dow = dayjs(dateStr).day(); // 0 Sun, 6 Sat
+  return dow === 0 || dow === 6 ? WEEKEND_SLOTS : WEEKDAY_SLOTS;
+}
+
 export function ResidentSubmissionPage() {
   const [form, setForm] = useState<any>({ moveType: 'MOVE_IN', elevatorRequired: true, loadingBayRequired: false });
+  const [slot, setSlot] = useState('');
   const [accepted, setAccepted] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  const availableSlots = getSlotsForDate(form.moveDate ?? '');
+  const isHoliday = form.moveDate && availableSlots !== null && availableSlots.length === 0;
+
+  const handleDateChange = (dateStr: string) => {
+    setForm({ ...form, moveDate: dateStr });
+    setSlot(''); // reset slot when date changes
+  };
+
   const submit = async (e: FormEvent) => {
     e.preventDefault();
-    if (
-      !form.residentName || !form.residentEmail || !form.residentPhone ||
-      !form.unit || !form.moveDate || !form.startDatetime || !form.endDatetime
-    ) {
+
+    if (!form.residentName || !form.residentEmail || !form.residentPhone || !form.unit) {
       setError('Please fill in all required fields');
+      setMessage('');
+      return;
+    }
+    if (!form.moveDate) {
+      setError('Please select a move date');
+      setMessage('');
+      return;
+    }
+    if (isHoliday) {
+      setError('Moves are not permitted on statutory holidays');
+      setMessage('');
+      return;
+    }
+    if (!slot) {
+      setError('Please select a time slot');
       setMessage('');
       return;
     }
@@ -24,13 +78,24 @@ export function ResidentSubmissionPage() {
       setMessage('');
       return;
     }
+
+    // Build startDatetime / endDatetime from date + slot
+    const selected = availableSlots?.find((s) => s.start === slot);
+    if (!selected) {
+      setError('Invalid time slot selected');
+      return;
+    }
+    const startDatetime = `${form.moveDate}T${selected.start}:00`;
+    const endDatetime   = `${form.moveDate}T${selected.end}:00`;
+
     setIsSubmitting(true);
     setError('');
     setMessage('');
     try {
-      await api.post('/api/bookings', form);
+      await api.post('/api/bookings', { ...form, startDatetime, endDatetime });
       setMessage('Move request submitted successfully! Check your email for confirmation.');
       setForm({ moveType: 'MOVE_IN', elevatorRequired: true, loadingBayRequired: false });
+      setSlot('');
       setAccepted(false);
     } catch (err: any) {
       setError(err.response?.data?.message || 'Failed to submit request. Please try again.');
@@ -117,22 +182,35 @@ export function ResidentSubmissionPage() {
               <label htmlFor="move-date" className="required">Move Date</label>
               <input id="move-date" type="date"
                 value={form.moveDate ?? ''}
-                onChange={(e) => setForm({ ...form, moveDate: e.target.value })} />
+                onChange={(e) => handleDateChange(e.target.value)} />
             </div>
 
-            <div className="form-row">
-              <div className="form-field">
-                <label htmlFor="start-datetime" className="required">Start Time</label>
-                <input id="start-datetime" type="datetime-local"
-                  value={form.startDatetime ?? ''}
-                  onChange={(e) => setForm({ ...form, startDatetime: e.target.value })} />
-              </div>
-              <div className="form-field">
-                <label htmlFor="end-datetime" className="required">End Time</label>
-                <input id="end-datetime" type="datetime-local"
-                  value={form.endDatetime ?? ''}
-                  onChange={(e) => setForm({ ...form, endDatetime: e.target.value })} />
-              </div>
+            {isHoliday && (
+              <p className="error-message slot-holiday-msg">
+                This date is a statutory holiday — no moves are permitted.
+              </p>
+            )}
+
+            <div className="form-field">
+              <label htmlFor="time-slot" className="required">Time Slot</label>
+              <select
+                id="time-slot"
+                value={slot}
+                onChange={(e) => setSlot(e.target.value)}
+                disabled={!form.moveDate || isHoliday}
+              >
+                <option value="">
+                  {!form.moveDate ? 'Select a date first' : 'Select a time slot'}
+                </option>
+                {(availableSlots ?? []).map((s) => (
+                  <option key={s.start} value={s.start}>{s.label}</option>
+                ))}
+              </select>
+              {form.moveDate && !isHoliday && availableSlots && (
+                <small>
+                  {availableSlots === WEEKDAY_SLOTS ? 'Weekday slots' : 'Weekend slots'}
+                </small>
+              )}
             </div>
 
             <div className="form-field">
@@ -159,11 +237,8 @@ export function ResidentSubmissionPage() {
 
           <div className="bylaws-acceptance">
             <label className="bylaws-label">
-              <input
-                type="checkbox"
-                checked={accepted}
-                onChange={(e) => setAccepted(e.target.checked)}
-              />
+              <input type="checkbox" checked={accepted}
+                onChange={(e) => setAccepted(e.target.checked)} />
               <span>
                 I confirm that I have read and will comply with the strata bylaws and move
                 rules, and that all required move fees/deposits have been or will be paid

@@ -91,6 +91,9 @@
   min-height: 72px;
 }
 
+/* Inline holiday warning under the date field */
+.slot-holiday-msg { margin: 4px 0 8px; }
+
 /* ── Bylaws acceptance ───────────────────────────────────────── */
 .bylaws-acceptance {
   background: #fefce8;
