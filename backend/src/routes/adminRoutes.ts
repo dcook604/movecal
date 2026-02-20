@@ -1,6 +1,7 @@
 import { FastifyInstance } from 'fastify';
 import { BookingStatus, NotifyEvent, UserRole } from '@prisma/client';
 import { z } from 'zod';
+import bcrypt from 'bcryptjs';
 import { prisma } from '../prisma.js';
 import { requireRole } from '../middleware/auth.js';
 import { encrypt } from '../utils/crypto.js';
@@ -75,5 +76,154 @@ export async function adminRoutes(app: FastifyInstance) {
     await prisma.notificationRecipient.delete({ where: { id } });
     await logAudit(prisma, req.user.id, 'RECIPIENT_DELETED', undefined, { recipientId: id });
     return { ok: true };
+  });
+
+  // User Management Routes (only for COUNCIL and PROPERTY_MANAGER)
+
+  // Get all users
+  app.get('/api/admin/users', { preHandler: [requireRole([UserRole.COUNCIL, UserRole.PROPERTY_MANAGER])] }, async () => {
+    const users = await prisma.user.findMany({
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        role: true,
+        createdAt: true
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+    return users;
+  });
+
+  // Create new user
+  app.post('/api/admin/users', { preHandler: [requireRole([UserRole.COUNCIL, UserRole.PROPERTY_MANAGER])] }, async (req, reply) => {
+    const body = z.object({
+      name: z.string().min(1).max(200),
+      email: z.string().email().max(320),
+      password: z.string().min(8, 'Password must be at least 8 characters'),
+      role: z.nativeEnum(UserRole)
+    }).parse(req.body);
+
+    const normalizedEmail = body.email.trim().toLowerCase();
+
+    // Check if email already exists
+    const existingUser = await prisma.user.findUnique({ where: { email: normalizedEmail } });
+    if (existingUser) {
+      return reply.status(400).send({ message: 'Email already in use' });
+    }
+
+    // Hash password
+    const passwordHash = await bcrypt.hash(body.password, 10);
+
+    // Create user
+    const user = await prisma.user.create({
+      data: {
+        name: body.name,
+        email: normalizedEmail,
+        passwordHash,
+        role: body.role
+      },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        role: true,
+        createdAt: true
+      }
+    });
+
+    await logAudit(prisma, req.user.id, 'USER_CREATED', undefined, {
+      userId: user.id,
+      email: user.email,
+      role: user.role
+    });
+
+    return user;
+  });
+
+  // Update user
+  app.patch('/api/admin/users/:id', { preHandler: [requireRole([UserRole.COUNCIL, UserRole.PROPERTY_MANAGER])] }, async (req, reply) => {
+    const userId = z.string().uuid().parse((req.params as { id: string }).id);
+    const body = z.object({
+      name: z.string().min(1).max(200).optional(),
+      email: z.string().email().max(320).optional(),
+      role: z.nativeEnum(UserRole).optional(),
+      password: z.string().min(8).optional()
+    }).parse(req.body);
+
+    // Prevent users from modifying themselves to avoid lockout
+    if (userId === req.user.id) {
+      return reply.status(400).send({
+        message: 'Cannot modify your own account from user management. Use Account Settings instead.'
+      });
+    }
+
+    const updateData: any = {};
+
+    if (body.name) updateData.name = body.name;
+    if (body.role) updateData.role = body.role;
+
+    if (body.email) {
+      const normalizedEmail = body.email.trim().toLowerCase();
+      // Check if email is already in use by another user
+      const existingUser = await prisma.user.findUnique({ where: { email: normalizedEmail } });
+      if (existingUser && existingUser.id !== userId) {
+        return reply.status(400).send({ message: 'Email already in use' });
+      }
+      updateData.email = normalizedEmail;
+    }
+
+    if (body.password) {
+      updateData.passwordHash = await bcrypt.hash(body.password, 10);
+    }
+
+    const user = await prisma.user.update({
+      where: { id: userId },
+      data: updateData,
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        role: true,
+        createdAt: true
+      }
+    });
+
+    await logAudit(prisma, req.user.id, 'USER_UPDATED', undefined, {
+      userId: user.id,
+      changes: Object.keys(updateData)
+    });
+
+    return user;
+  });
+
+  // Delete user
+  app.delete('/api/admin/users/:id', { preHandler: [requireRole([UserRole.COUNCIL, UserRole.PROPERTY_MANAGER])] }, async (req, reply) => {
+    const userId = z.string().uuid().parse((req.params as { id: string }).id);
+
+    // Prevent users from deleting themselves
+    if (userId === req.user.id) {
+      return reply.status(400).send({ message: 'Cannot delete your own account' });
+    }
+
+    // Get user before deletion for audit log
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { email: true, role: true }
+    });
+
+    if (!user) {
+      return reply.status(404).send({ message: 'User not found' });
+    }
+
+    await prisma.user.delete({ where: { id: userId } });
+
+    await logAudit(prisma, req.user.id, 'USER_DELETED', undefined, {
+      userId,
+      email: user.email,
+      role: user.role
+    });
+
+    return { ok: true, message: 'User deleted successfully' };
   });
 }

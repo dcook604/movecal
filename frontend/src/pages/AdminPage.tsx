@@ -43,6 +43,12 @@ export function AdminPage() {
   const [emailForm, setEmailForm] = useState({ newEmail: '', password: '' });
   const [accountMessage, setAccountMessage] = useState('');
 
+  // User management state
+  const [users, setUsers] = useState<any[]>([]);
+  const [userForm, setUserForm] = useState({ name: '', email: '', password: '', role: 'CONCIERGE' });
+  const [editingUserId, setEditingUserId] = useState<string | null>(null);
+  const [userMessage, setUserMessage] = useState('');
+
   const canManageSettings = role === 'COUNCIL' || role === 'PROPERTY_MANAGER';
 
   const refresh = async () => {
@@ -56,12 +62,14 @@ export function AdminPage() {
       setStats(s.data);
 
       if (canManageSettings) {
-        const [r, st] = await Promise.all([
+        const [r, st, u] = await Promise.all([
           api.get('/api/admin/recipients'),
-          api.get('/api/admin/settings')
+          api.get('/api/admin/settings'),
+          api.get('/api/admin/users')
         ]);
         setRecipients(r.data);
         if (st.data) setSettings((prev: any) => ({ ...prev, ...st.data, smtpPassword: '' }));
+        setUsers(u.data);
       }
     } catch (error) {
       if (axios.isAxiosError(error) && error.response?.status === 403) {
@@ -264,6 +272,85 @@ export function AdminPage() {
       const errorMsg = error.response?.data?.message || 'Failed to change email';
       setAccountMessage(errorMsg);
     }
+  };
+
+  // User Management Functions
+  const createUser = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!canManageSettings) return;
+
+    setUserMessage('');
+    try {
+      await api.post('/api/admin/users', userForm);
+      setUserMessage('User created successfully');
+      setUserForm({ name: '', email: '', password: '', role: 'CONCIERGE' });
+      await refresh();
+    } catch (error: any) {
+      const errorMsg = error.response?.data?.message || 'Failed to create user';
+      setUserMessage(errorMsg);
+    }
+  };
+
+  const updateUser = async (userId: string) => {
+    if (!canManageSettings) return;
+
+    setUserMessage('');
+    try {
+      const updateData: any = {
+        name: userForm.name,
+        email: userForm.email,
+        role: userForm.role
+      };
+
+      // Only include password if it's been entered
+      if (userForm.password) {
+        updateData.password = userForm.password;
+      }
+
+      await api.patch(`/api/admin/users/${userId}`, updateData);
+      setUserMessage('User updated successfully');
+      setEditingUserId(null);
+      setUserForm({ name: '', email: '', password: '', role: 'CONCIERGE' });
+      await refresh();
+    } catch (error: any) {
+      const errorMsg = error.response?.data?.message || 'Failed to update user';
+      setUserMessage(errorMsg);
+    }
+  };
+
+  const deleteUser = async (userId: string, userEmail: string) => {
+    if (!canManageSettings) return;
+
+    if (!confirm(`Are you sure you want to delete user ${userEmail}?`)) {
+      return;
+    }
+
+    setUserMessage('');
+    try {
+      await api.delete(`/api/admin/users/${userId}`);
+      setUserMessage('User deleted successfully');
+      await refresh();
+    } catch (error: any) {
+      const errorMsg = error.response?.data?.message || 'Failed to delete user';
+      setUserMessage(errorMsg);
+    }
+  };
+
+  const startEditUser = (user: any) => {
+    setEditingUserId(user.id);
+    setUserForm({
+      name: user.name,
+      email: user.email,
+      password: '',
+      role: user.role
+    });
+    setUserMessage('');
+  };
+
+  const cancelEditUser = () => {
+    setEditingUserId(null);
+    setUserForm({ name: '', email: '', password: '', role: 'CONCIERGE' });
+    setUserMessage('');
   };
 
   if (!token) {
@@ -534,6 +621,208 @@ export function AdminPage() {
               </div>
             </div>
             <button type="submit">Add Recipient</button>
+          </form>
+
+          <h3>User Management</h3>
+          <p style={{ fontSize: '0.875rem', color: '#64748b', marginBottom: '16px' }}>
+            Manage system users and their access levels
+          </p>
+
+          {userMessage && <p className={userMessage.includes('success') ? 'success-message' : 'error-message'}>{userMessage}</p>}
+
+          {/* Users List */}
+          <div style={{ marginBottom: '24px' }}>
+            {users.length === 0 ? (
+              <p style={{ color: '#64748b', fontStyle: 'italic' }}>No users found</p>
+            ) : (
+              <div>
+                {users.map((u) => (
+                  <div key={u.id} style={{
+                    border: '1px solid #e2e8f0',
+                    borderRadius: '8px',
+                    padding: '12px',
+                    marginBottom: '12px',
+                    backgroundColor: editingUserId === u.id ? '#f0f9ff' : '#ffffff'
+                  }}>
+                    {editingUserId === u.id ? (
+                      /* Edit Mode */
+                      <div>
+                        <div style={{ marginBottom: '12px' }}>
+                          <label style={{ display: 'block', marginBottom: '4px', fontSize: '0.875rem', fontWeight: 600 }}>Name</label>
+                          <input
+                            value={userForm.name}
+                            onChange={(e) => setUserForm({ ...userForm, name: e.target.value })}
+                            style={{ width: '100%' }}
+                          />
+                        </div>
+                        <div style={{ marginBottom: '12px' }}>
+                          <label style={{ display: 'block', marginBottom: '4px', fontSize: '0.875rem', fontWeight: 600 }}>Email</label>
+                          <input
+                            type="email"
+                            value={userForm.email}
+                            onChange={(e) => setUserForm({ ...userForm, email: e.target.value })}
+                            style={{ width: '100%' }}
+                          />
+                        </div>
+                        <div style={{ marginBottom: '12px' }}>
+                          <label style={{ display: 'block', marginBottom: '4px', fontSize: '0.875rem', fontWeight: 600 }}>
+                            New Password <span style={{ fontSize: '0.75rem', color: '#64748b' }}>(leave blank to keep current)</span>
+                          </label>
+                          <input
+                            type="password"
+                            value={userForm.password}
+                            onChange={(e) => setUserForm({ ...userForm, password: e.target.value })}
+                            style={{ width: '100%' }}
+                            placeholder="Leave blank to keep current password"
+                          />
+                        </div>
+                        <div style={{ marginBottom: '12px' }}>
+                          <label style={{ display: 'block', marginBottom: '4px', fontSize: '0.875rem', fontWeight: 600 }}>Role</label>
+                          <select
+                            value={userForm.role}
+                            onChange={(e) => setUserForm({ ...userForm, role: e.target.value })}
+                            style={{ width: '100%' }}
+                          >
+                            <option value="CONCIERGE">Concierge - View & Manage Bookings</option>
+                            <option value="COUNCIL">Council - Full Access</option>
+                            <option value="PROPERTY_MANAGER">Property Manager - Full Access</option>
+                          </select>
+                        </div>
+                        <div style={{ display: 'flex', gap: '8px' }}>
+                          <button
+                            type="button"
+                            onClick={() => updateUser(u.id)}
+                            style={{ background: '#10b981', minHeight: 'auto', width: 'auto', padding: '6px 16px', fontSize: '0.875rem' }}
+                          >
+                            Save Changes
+                          </button>
+                          <button
+                            type="button"
+                            onClick={cancelEditUser}
+                            style={{ background: '#64748b', minHeight: 'auto', width: 'auto', padding: '6px 16px', fontSize: '0.875rem' }}
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      /* View Mode */
+                      <div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: '8px' }}>
+                          <div>
+                            <div style={{ fontWeight: 600, color: '#0f172a', fontSize: '1rem' }}>
+                              {u.name}
+                            </div>
+                            <div style={{ fontSize: '0.875rem', color: '#64748b' }}>{u.email}</div>
+                          </div>
+                          <div style={{ display: 'flex', gap: '8px' }}>
+                            <button
+                              type="button"
+                              onClick={() => startEditUser(u)}
+                              style={{
+                                padding: '4px 12px',
+                                fontSize: '0.875rem',
+                                background: '#3b82f6',
+                                minHeight: 'auto',
+                                width: 'auto'
+                              }}
+                            >
+                              Edit
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => deleteUser(u.id, u.email)}
+                              style={{
+                                padding: '4px 12px',
+                                fontSize: '0.875rem',
+                                background: '#dc2626',
+                                minHeight: 'auto',
+                                width: 'auto'
+                              }}
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        </div>
+                        <div style={{ fontSize: '0.875rem' }}>
+                          <span style={{
+                            background: u.role === 'PROPERTY_MANAGER' || u.role === 'COUNCIL' ? '#10b981' : '#3b82f6',
+                            color: 'white',
+                            padding: '2px 8px',
+                            borderRadius: '4px',
+                            fontSize: '0.75rem',
+                            fontWeight: 600
+                          }}>
+                            {u.role === 'CONCIERGE' ? 'Concierge' : u.role === 'COUNCIL' ? 'Council' : 'Property Manager'}
+                          </span>
+                          <span style={{ marginLeft: '12px', color: '#64748b' }}>
+                            Created: {new Date(u.createdAt).toLocaleDateString()}
+                          </span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Add New User Form */}
+          <h4>Add New User</h4>
+          <form onSubmit={createUser} style={{ border: '1px solid #e2e8f0', borderRadius: '8px', padding: '16px', marginBottom: '24px' }}>
+            <div className="form-field">
+              <label htmlFor="user-name" className="required">Full Name</label>
+              <input
+                id="user-name"
+                placeholder="e.g. John Smith"
+                value={userForm.name}
+                onChange={(e) => setUserForm({ ...userForm, name: e.target.value })}
+                required
+              />
+            </div>
+            <div className="form-field">
+              <label htmlFor="user-email" className="required">Email</label>
+              <input
+                id="user-email"
+                type="email"
+                placeholder="john@strata.local"
+                value={userForm.email}
+                onChange={(e) => setUserForm({ ...userForm, email: e.target.value })}
+                required
+              />
+            </div>
+            <div className="form-field">
+              <label htmlFor="user-password" className="required">Password</label>
+              <input
+                id="user-password"
+                type="password"
+                placeholder="Minimum 8 characters"
+                value={userForm.password}
+                onChange={(e) => setUserForm({ ...userForm, password: e.target.value })}
+                minLength={8}
+                required
+              />
+              <small style={{ color: '#64748b', fontSize: '0.75rem' }}>Minimum 8 characters</small>
+            </div>
+            <div className="form-field">
+              <label htmlFor="user-role" className="required">Access Level</label>
+              <select
+                id="user-role"
+                value={userForm.role}
+                onChange={(e) => setUserForm({ ...userForm, role: e.target.value })}
+                required
+              >
+                <option value="CONCIERGE">Concierge - View & Manage Bookings</option>
+                <option value="COUNCIL">Council - Full Access (Settings, Users, Recipients)</option>
+                <option value="PROPERTY_MANAGER">Property Manager - Full Access (Settings, Users, Recipients)</option>
+              </select>
+              <small style={{ color: '#64748b', fontSize: '0.75rem', display: 'block', marginTop: '4px' }}>
+                {userForm.role === 'CONCIERGE' && '• Can view and manage bookings only'}
+                {userForm.role === 'COUNCIL' && '• Can manage everything including settings and users'}
+                {userForm.role === 'PROPERTY_MANAGER' && '• Can manage everything including settings and users'}
+              </small>
+            </div>
+            <button type="submit">Create User</button>
           </form>
 
           <h3>SMTP Settings</h3>
