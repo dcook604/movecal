@@ -44,6 +44,7 @@ await fs.mkdir(uploadsRoot, { recursive: true });
 await app.register(staticPlugin, {
   root: uploadsRoot,
   prefix: '/uploads/',
+  decorateReply: false,
   setHeaders: (res, filePath) => {
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('Content-Disposition', `attachment; filename="${path.basename(filePath)}"`);
