@@ -101,7 +101,7 @@ export function PublicCalendarPage() {
       <header className="calendar-header">
         <div className="header-content">
           <div className="header-title-section">
-            <h1 className="calendar-title">Building Calendar</h1>
+            <h1 className="calendar-title">Spectrum 4 Calendar</h1>
             <p className="calendar-subtitle">Approved Move & Delivery Reservations</p>
           </div>
           <div className="header-info">
