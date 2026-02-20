@@ -29,8 +29,17 @@ export function PublicCalendarPage() {
       });
     };
     load();
-    const timer = setInterval(load, 30000);
+    const timer = setInterval(load, 30000); // Refresh data every 30 seconds
     return () => clearInterval(timer);
+  }, []);
+
+  // Auto-refresh entire page every 1 hour to keep everything fresh
+  useEffect(() => {
+    const pageRefreshTimer = setInterval(() => {
+      window.location.reload();
+    }, 3600000); // 1 hour = 3600000 milliseconds
+
+    return () => clearInterval(pageRefreshTimer);
   }, []);
 
   const events = useMemo<Event[]>(
