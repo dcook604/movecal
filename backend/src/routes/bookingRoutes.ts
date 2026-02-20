@@ -11,6 +11,7 @@ import { requireAuth, requireRole } from '../middleware/auth.js';
 import { sendEmail, sendNotificationRecipients } from '../services/emailService.js';
 import { logAudit } from '../services/auditService.js';
 import { config } from '../config.js';
+import { validateMoveTime } from '../utils/moveTimeValidator.js';
 
 const createSchema = z.object({
   residentName: z.string().min(1).max(200),
@@ -34,6 +35,13 @@ const uuidSchema = z.string().uuid();
 export async function bookingRoutes(app: FastifyInstance) {
   app.post('/api/bookings', async (req, reply) => {
     const body = createSchema.parse(req.body);
+
+    // Validate move time restrictions
+    const timeValidation = validateMoveTime(body.startDatetime, body.endDatetime);
+    if (!timeValidation.valid) {
+      return reply.status(400).send({ message: timeValidation.error });
+    }
+
     const systemUser = await prisma.user.findFirst({ where: { role: UserRole.CONCIERGE } });
     if (!systemUser) return reply.status(500).send({ message: 'Seed concierge user first' });
 
@@ -76,11 +84,20 @@ export async function bookingRoutes(app: FastifyInstance) {
     return booking;
   });
 
-  app.post('/api/admin/quick-entry/approve', { preHandler: [requireRole([UserRole.CONCIERGE, UserRole.COUNCIL, UserRole.PROPERTY_MANAGER])] }, async (req) => {
+  app.post('/api/admin/quick-entry/approve', { preHandler: [requireRole([UserRole.CONCIERGE, UserRole.COUNCIL, UserRole.PROPERTY_MANAGER])] }, async (req, reply) => {
     const body = createSchema.parse(req.body);
+
+    // Validate move time restrictions (admins can override with proper role)
     const user = req.user;
     const overrideRoles: UserRole[] = [UserRole.COUNCIL, UserRole.PROPERTY_MANAGER];
     const allowOverride = overrideRoles.includes(user.role);
+
+    if (!allowOverride) {
+      const timeValidation = validateMoveTime(body.startDatetime, body.endDatetime);
+      if (!timeValidation.valid) {
+        return reply.status(400).send({ message: timeValidation.error });
+      }
+    }
 
     const booking = await prisma.$transaction(async (tx) => {
       await assertNoConflict(
@@ -127,7 +144,7 @@ export async function bookingRoutes(app: FastifyInstance) {
     async () => prisma.booking.findMany({ include: { documents: true }, orderBy: { startDatetime: 'asc' } })
   );
 
-  app.patch('/api/admin/bookings/:id', { preHandler: [requireRole([UserRole.CONCIERGE, UserRole.COUNCIL, UserRole.PROPERTY_MANAGER])] }, async (req) => {
+  app.patch('/api/admin/bookings/:id', { preHandler: [requireRole([UserRole.CONCIERGE, UserRole.COUNCIL, UserRole.PROPERTY_MANAGER])] }, async (req, reply) => {
     const body = z
       .object({
         status: z.nativeEnum(BookingStatus).optional(),
@@ -142,6 +159,16 @@ export async function bookingRoutes(app: FastifyInstance) {
     const existing = await prisma.booking.findUniqueOrThrow({ where: { id: bookingId } });
     const overrideRoles: UserRole[] = [UserRole.COUNCIL, UserRole.PROPERTY_MANAGER];
     const allowOverride = overrideRoles.includes(user.role) && !!body.overrideConflict;
+
+    // Validate move time restrictions if times are being updated
+    if ((body.startDatetime || body.endDatetime) && !allowOverride) {
+      const newStart = body.startDatetime ?? existing.startDatetime;
+      const newEnd = body.endDatetime ?? existing.endDatetime;
+      const timeValidation = validateMoveTime(newStart, newEnd);
+      if (!timeValidation.valid) {
+        return reply.status(400).send({ message: timeValidation.error });
+      }
+    }
 
     const updated = await prisma.$transaction(async (tx) => {
       await assertNoConflict(

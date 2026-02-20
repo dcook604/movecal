@@ -37,6 +37,24 @@ export function ResidentSubmissionPage() {
   return (
     <form onSubmit={submit}>
       <h2>Move Request</h2>
+
+      <div style={{
+        background: '#eff6ff',
+        border: '1px solid #3b82f6',
+        borderRadius: '8px',
+        padding: '16px',
+        marginBottom: '24px'
+      }}>
+        <h3 style={{ margin: '0 0 8px 0', color: '#1e40af', fontSize: '1rem' }}>
+          📅 Permitted Move Times
+        </h3>
+        <ul style={{ margin: '0', paddingLeft: '20px', color: '#1e40af', fontSize: '0.875rem' }}>
+          <li><strong>Monday-Friday:</strong> 10:00 AM - 4:00 PM</li>
+          <li><strong>Saturday-Sunday:</strong> 8:00 AM - 5:00 PM</li>
+          <li><strong>Statutory Holidays:</strong> NO MOVES PERMITTED</li>
+        </ul>
+      </div>
+
       <div className="form-field">
         <label htmlFor="resident-name">Resident Name</label>
         <input id="resident-name" placeholder="e.g. Jane Smith" onChange={(e) => setForm({ ...form, residentName: e.target.value })} />
@@ -63,6 +81,7 @@ export function ResidentSubmissionPage() {
           <option>MOVE_IN</option>
           <option>MOVE_OUT</option>
           <option>DELIVERY</option>
+          <option>RENO</option>
         </select>
       </div>
 

@@ -39,7 +39,8 @@ export function PublicCalendarPage() {
         const typeLabels: Record<string, string> = {
           'MOVE_IN': 'Move In',
           'MOVE_OUT': 'Move Out',
-          'DELIVERY': 'Delivery'
+          'DELIVERY': 'Delivery',
+          'RENO': 'Renovation'
         };
         const fullType = typeLabels[row.moveType] || row.moveType;
 
@@ -79,7 +80,8 @@ export function PublicCalendarPage() {
     const colors: Record<string, { bg: string; border: string }> = {
       'MOVE_IN': { bg: '#dbeafe', border: '#3b82f6' },
       'MOVE_OUT': { bg: '#fce7f3', border: '#ec4899' },
-      'DELIVERY': { bg: '#d1fae5', border: '#10b981' }
+      'DELIVERY': { bg: '#d1fae5', border: '#10b981' },
+      'RENO': { bg: '#fef3c7', border: '#f59e0b' }
     };
     const color = colors[moveType] || { bg: '#f3f4f6', border: '#6b7280' };
 
@@ -166,6 +168,10 @@ export function PublicCalendarPage() {
             <span className="legend-dot delivery"></span>
             <span>Delivery</span>
           </div>
+          <div className="legend-item">
+            <span className="legend-dot reno"></span>
+            <span>Renovation</span>
+          </div>
         </div>
       </div>
 
@@ -202,7 +208,8 @@ export function PublicCalendarPage() {
               const typeColors: Record<string, string> = {
                 'MOVE_IN': 'move-in',
                 'MOVE_OUT': 'move-out',
-                'DELIVERY': 'delivery'
+                'DELIVERY': 'delivery',
+                'RENO': 'reno'
               };
               const colorClass = typeColors[resource.moveType] || 'default';
 

@@ -7,6 +7,7 @@ import { prisma } from '../prisma.js';
 import { config } from '../config.js';
 import { assertNoConflict } from '../services/conflictService.js';
 import { requireRole } from '../middleware/auth.js';
+import { validateMoveTime } from '../utils/moveTimeValidator.js';
 
 const intakeSchema = z.object({
   residentName: z.string().min(1),
@@ -53,6 +54,12 @@ export async function systemRoutes(app: FastifyInstance) {
     const secret = req.headers['x-intake-secret'];
     if (secret !== config.intakeSecret) return reply.status(401).send({ message: 'Invalid secret' });
     const body = intakeSchema.parse(req.body);
+
+    // Validate move time restrictions
+    const timeValidation = validateMoveTime(body.startDatetime, body.endDatetime);
+    if (!timeValidation.valid) {
+      return reply.status(400).send({ message: timeValidation.error });
+    }
 
     const concierge = await prisma.user.findFirstOrThrow({ where: { role: UserRole.CONCIERGE } });
     const booking = await prisma.$transaction(async (tx) => {

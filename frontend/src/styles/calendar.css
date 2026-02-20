@@ -20,6 +20,8 @@
   --cal-move-out-bg: #fce7f3;
   --cal-delivery: #10b981;
   --cal-delivery-bg: #d1fae5;
+  --cal-reno: #f59e0b;
+  --cal-reno-bg: #fef3c7;
 
   /* Spacing */
   --cal-spacing-xs: 0.5rem;
@@ -269,6 +271,10 @@
   background: var(--cal-delivery);
 }
 
+.legend-dot.reno {
+  background: var(--cal-reno);
+}
+
 /* Calendar Wrapper */
 .calendar-wrapper {
   max-width: 1200px;
@@ -427,6 +433,11 @@
   background: linear-gradient(to bottom, var(--cal-surface) 0%, rgba(209, 250, 229, 0.3) 100%);
 }
 
+.event-card.reno {
+  border-left-color: var(--cal-reno);
+  background: linear-gradient(to bottom, var(--cal-surface) 0%, rgba(254, 243, 199, 0.3) 100%);
+}
+
 .event-type-badge {
   display: inline-block;
   padding: 0.25rem 0.75rem;
@@ -450,6 +461,10 @@
 
 .event-card.delivery .event-type-badge {
   background: var(--cal-delivery);
+}
+
+.event-card.reno .event-type-badge {
+  background: var(--cal-reno);
 }
 
 .event-details {
