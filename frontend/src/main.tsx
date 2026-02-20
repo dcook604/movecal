@@ -1,21 +1,35 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-import { BrowserRouter, Link, Route, Routes } from 'react-router-dom';
+import { BrowserRouter, NavLink, Route, Routes, useLocation } from 'react-router-dom';
 import { PublicCalendarPage } from './pages/PublicCalendarPage';
 import { ResidentSubmissionPage } from './pages/ResidentSubmissionPage';
 import { AdminPage } from './pages/AdminPage';
+import { LobbyTVPage } from './pages/LobbyTVPage';
 import './styles.css';
+
+function Nav() {
+  const { pathname } = useLocation();
+  // Hide nav on TV mode — full-screen display
+  if (pathname === '/tv') return null;
+  return (
+    <nav className="site-nav">
+      <NavLink to="/">Public Calendar</NavLink>
+      <NavLink to="/submit">Resident Submit</NavLink>
+      <NavLink to="/admin">Admin</NavLink>
+      <NavLink to="/tv">Lobby TV</NavLink>
+    </nav>
+  );
+}
 
 function App() {
   return (
     <BrowserRouter>
-      <nav>
-        <Link to="/">Public Calendar</Link> | <Link to="/submit">Resident Submit</Link> | <Link to="/admin">Admin</Link>
-      </nav>
+      <Nav />
       <Routes>
-        <Route path="/" element={<PublicCalendarPage />} />
+        <Route path="/"       element={<PublicCalendarPage />} />
         <Route path="/submit" element={<ResidentSubmissionPage />} />
-        <Route path="/admin" element={<AdminPage />} />
+        <Route path="/admin"  element={<AdminPage />} />
+        <Route path="/tv"     element={<LobbyTVPage />} />
       </Routes>
     </BrowserRouter>
   );

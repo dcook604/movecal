@@ -1,8 +1,11 @@
 import { BookingStatus, Prisma } from '@prisma/client';
 import dayjs from 'dayjs';
 
+// Outermost permitted hours across all day types:
+// Weekdays start at 10, weekends start at 8 → earliest possible = 8
+// Weekdays end at 16, weekends end at 17 → latest possible = 17
 const MOVE_START_HOUR = 8;
-const MOVE_END_HOUR = 16;
+const MOVE_END_HOUR = 17;
 const BUFFER_MINUTES = 60;
 
 export type ConflictCandidate = {
@@ -16,8 +19,10 @@ export function validateMoveHours(startDatetime: Date, endDatetime: Date) {
   const start = dayjs(startDatetime);
   const end = dayjs(endDatetime);
   if (!end.isAfter(start)) throw new Error('End time must be after start time');
+  // Sanity-check against absolute outer bounds (8am–5pm).
+  // Detailed slot validation is handled by validateMoveTime in moveTimeValidator.ts.
   if (start.hour() < MOVE_START_HOUR || end.hour() > MOVE_END_HOUR || (end.hour() === MOVE_END_HOUR && end.minute() > 0)) {
-    throw new Error('Booking must be between 8:00 AM and 4:00 PM');
+    throw new Error('Booking must be within permitted move hours (8:00 AM – 5:00 PM)');
   }
 }
 

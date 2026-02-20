@@ -37,11 +37,30 @@ interface MoveTimeValidationResult {
   error?: string;
 }
 
+// Permitted move slots in [startMinutes, endMinutes] pairs
+// Monday–Friday: 10am–1pm, 1pm–4pm
+const WEEKDAY_SLOTS: [number, number][] = [
+  [10 * 60, 13 * 60], // 10:00 AM – 1:00 PM
+  [13 * 60, 16 * 60], // 1:00 PM  – 4:00 PM
+];
+
+// Saturday–Sunday: 8am–11am, 11am–2pm, 2pm–5pm
+const WEEKEND_SLOTS: [number, number][] = [
+  [ 8 * 60, 11 * 60], // 8:00 AM  – 11:00 AM
+  [11 * 60, 14 * 60], // 11:00 AM – 2:00 PM
+  [14 * 60, 17 * 60], // 2:00 PM  – 5:00 PM
+];
+
+function fitsInSlot(startMins: number, endMins: number, slots: [number, number][]): boolean {
+  return slots.some(([s, e]) => startMins >= s && endMins <= e);
+}
+
 /**
  * Validates move times according to building rules:
- * - Monday-Friday: 10:00 AM - 4:00 PM
- * - Saturday-Sunday: 8:00 AM - 5:00 PM
+ * - Monday–Friday: slots 10am–1pm or 1pm–4pm
+ * - Saturday–Sunday: slots 8am–11am, 11am–2pm, or 2pm–5pm
  * - No moves on statutory holidays
+ * The booking's start AND end must fall entirely within one slot.
  */
 export function validateMoveTime(startDatetime: Date, endDatetime: Date): MoveTimeValidationResult {
   const start = dayjs(startDatetime);
@@ -73,60 +92,28 @@ export function validateMoveTime(startDatetime: Date, endDatetime: Date): MoveTi
     };
   }
 
-  const startHour = start.hour();
-  const startMinute = start.minute();
-  const endHour = end.hour();
-  const endMinute = end.minute();
+  const startMins = start.hour() * 60 + start.minute();
+  const endMins   = end.hour()   * 60 + end.minute();
 
   // Weekend rules (Saturday = 6, Sunday = 0)
   if (dayOfWeek === 0 || dayOfWeek === 6) {
-    // Saturday & Sunday: 8:00 AM - 5:00 PM
-    const minTime = 8 * 60; // 8:00 AM in minutes
-    const maxTime = 17 * 60; // 5:00 PM in minutes
-
-    const startInMinutes = startHour * 60 + startMinute;
-    const endInMinutes = endHour * 60 + endMinute;
-
-    if (startInMinutes < minTime) {
+    if (!fitsInSlot(startMins, endMins, WEEKEND_SLOTS)) {
       return {
         valid: false,
-        error: 'Weekend moves must start at or after 8:00 AM'
+        error: 'Weekend moves must fit within one permitted slot: 8am–11am, 11am–2pm, or 2pm–5pm'
       };
     }
-
-    if (endInMinutes > maxTime) {
-      return {
-        valid: false,
-        error: 'Weekend moves must end by 5:00 PM'
-      };
-    }
-
     return { valid: true };
   }
 
-  // Weekday rules (Monday-Friday)
+  // Weekday rules (Monday–Friday)
   if (dayOfWeek >= 1 && dayOfWeek <= 5) {
-    // Monday-Friday: 10:00 AM - 4:00 PM
-    const minTime = 10 * 60; // 10:00 AM in minutes
-    const maxTime = 16 * 60; // 4:00 PM in minutes
-
-    const startInMinutes = startHour * 60 + startMinute;
-    const endInMinutes = endHour * 60 + endMinute;
-
-    if (startInMinutes < minTime) {
+    if (!fitsInSlot(startMins, endMins, WEEKDAY_SLOTS)) {
       return {
         valid: false,
-        error: 'Weekday moves must start at or after 10:00 AM'
+        error: 'Weekday moves must fit within one permitted slot: 10am–1pm or 1pm–4pm'
       };
     }
-
-    if (endInMinutes > maxTime) {
-      return {
-        valid: false,
-        error: 'Weekday moves must end by 4:00 PM'
-      };
-    }
-
     return { valid: true };
   }
 
@@ -137,9 +124,9 @@ export function validateMoveTime(startDatetime: Date, endDatetime: Date): MoveTi
  * Get the permitted move times as a human-readable string
  */
 export function getPermittedMoveTimes(): string {
-  return `Moves are permitted:
-• Monday-Friday: 10:00 AM - 4:00 PM
-• Saturday-Sunday: 8:00 AM - 5:00 PM
+  return `Moves are permitted within the following slots:
+• Monday–Friday: 10:00 AM–1:00 PM or 1:00 PM–4:00 PM
+• Saturday–Sunday: 8:00 AM–11:00 AM, 11:00 AM–2:00 PM, or 2:00 PM–5:00 PM
 • NO MOVES PERMITTED ON STATUTORY HOLIDAYS`;
 }
 

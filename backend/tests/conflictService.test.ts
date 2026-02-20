@@ -18,7 +18,15 @@ describe('conflict logic', () => {
     expect(conflict).toBe(false);
   });
 
-  it('enforces move hours', () => {
+  it('enforces move hours — rejects before 8am', () => {
     expect(() => validateMoveHours(new Date('2025-01-01T07:30:00'), new Date('2025-01-01T08:30:00'))).toThrow();
+  });
+
+  it('enforces move hours — rejects after 5pm', () => {
+    expect(() => validateMoveHours(new Date('2025-01-01T16:00:00'), new Date('2025-01-01T17:30:00'))).toThrow();
+  });
+
+  it('allows booking within outer bounds', () => {
+    expect(() => validateMoveHours(new Date('2025-01-01T10:00:00'), new Date('2025-01-01T13:00:00'))).not.toThrow();
   });
 });

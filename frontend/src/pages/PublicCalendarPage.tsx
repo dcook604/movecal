@@ -15,11 +15,24 @@ type PublicBooking = {
 
 const localizer = dayjsLocalizer(dayjs);
 
+function getCalendarHeight() {
+  if (typeof window === 'undefined') return 600;
+  if (window.innerWidth < 480) return 420;
+  if (window.innerWidth < 768) return 500;
+  return 620;
+}
+
+function getDefaultView(): View {
+  if (typeof window === 'undefined') return 'week';
+  return window.innerWidth < 768 ? 'agenda' : 'week';
+}
+
 export function PublicCalendarPage() {
   const [rows, setRows] = useState<PublicBooking[]>([]);
-  const [view, setView] = useState<View>('week');
+  const [view, setView] = useState<View>(getDefaultView);
   const [date, setDate] = useState(new Date());
   const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
+  const [calHeight, setCalHeight] = useState(getCalendarHeight);
 
   useEffect(() => {
     const load = () => {
@@ -29,35 +42,38 @@ export function PublicCalendarPage() {
       });
     };
     load();
-    const timer = setInterval(load, 30000); // Refresh data every 30 seconds
+    const timer = setInterval(load, 30000);
     return () => clearInterval(timer);
   }, []);
 
-  // Auto-refresh entire page every 1 hour to keep everything fresh
+  // Auto-refresh entire page every 1 hour
   useEffect(() => {
-    const pageRefreshTimer = setInterval(() => {
-      window.location.reload();
-    }, 3600000); // 1 hour = 3600000 milliseconds
-
+    const pageRefreshTimer = setInterval(() => { window.location.reload(); }, 3600000);
     return () => clearInterval(pageRefreshTimer);
+  }, []);
+
+  // Update calendar height on resize
+  useEffect(() => {
+    const onResize = () => setCalHeight(getCalendarHeight());
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
   }, []);
 
   const events = useMemo<Event[]>(
     () =>
       rows.map((row) => {
         const typeLabels: Record<string, string> = {
-          'MOVE_IN': 'Move In',
-          'MOVE_OUT': 'Move Out',
-          'DELIVERY': 'Delivery',
-          'RENO': 'Renovation'
+          MOVE_IN: 'Move In',
+          MOVE_OUT: 'Move Out',
+          DELIVERY: 'Delivery',
+          RENO: 'Renovation',
         };
         const fullType = typeLabels[row.moveType] || row.moveType;
-
         return {
           title: `${fullType} • Unit ${row.unit}`,
           start: new Date(row.startDatetime),
           end: new Date(row.endDatetime),
-          resource: { ...row, displayType: fullType }
+          resource: { ...row, displayType: fullType },
         };
       }),
     [rows]
@@ -66,7 +82,7 @@ export function PublicCalendarPage() {
   const upcomingEvents = useMemo(() => {
     const now = new Date();
     return events
-      .filter(e => e.start && e.start >= now)
+      .filter((e) => e.start && e.start >= now)
       .sort((a, b) => {
         if (!a.start || !b.start) return 0;
         return a.start.getTime() - b.start.getTime();
@@ -77,23 +93,22 @@ export function PublicCalendarPage() {
   const todayEvents = useMemo(() => {
     const today = dayjs().startOf('day');
     const tomorrow = today.add(1, 'day');
-    return events.filter(e => {
+    return events.filter((e) => {
       if (!e.start) return false;
-      const eventDate = dayjs(e.start);
-      return eventDate.isAfter(today) && eventDate.isBefore(tomorrow);
+      const d = dayjs(e.start);
+      return d.isAfter(today) && d.isBefore(tomorrow);
     });
   }, [events]);
 
   const eventStyleGetter = (event: Event) => {
     const moveType = (event.resource as any)?.moveType;
     const colors: Record<string, { bg: string; border: string }> = {
-      'MOVE_IN': { bg: '#dbeafe', border: '#3b82f6' },
-      'MOVE_OUT': { bg: '#fce7f3', border: '#ec4899' },
-      'DELIVERY': { bg: '#d1fae5', border: '#10b981' },
-      'RENO': { bg: '#fef3c7', border: '#f59e0b' }
+      MOVE_IN:   { bg: '#dbeafe', border: '#3b82f6' },
+      MOVE_OUT:  { bg: '#fce7f3', border: '#ec4899' },
+      DELIVERY:  { bg: '#d1fae5', border: '#10b981' },
+      RENO:      { bg: '#fef3c7', border: '#f59e0b' },
     };
     const color = colors[moveType] || { bg: '#f3f4f6', border: '#6b7280' };
-
     return {
       style: {
         backgroundColor: color.bg,
@@ -101,8 +116,8 @@ export function PublicCalendarPage() {
         borderRadius: '4px',
         color: '#1f2937',
         border: 'none',
-        outline: 'none'
-      }
+        outline: 'none',
+      },
     };
   };
 
@@ -144,43 +159,17 @@ export function PublicCalendarPage() {
       {/* View Controls */}
       <div className="view-controls">
         <div className="view-toggle">
-          <button
-            className={`view-btn ${view === 'month' ? 'active' : ''}`}
-            onClick={() => setView('month')}
-          >
-            Month
-          </button>
-          <button
-            className={`view-btn ${view === 'week' ? 'active' : ''}`}
-            onClick={() => setView('week')}
-          >
-            Week
-          </button>
-          <button
-            className={`view-btn ${view === 'day' ? 'active' : ''}`}
-            onClick={() => setView('day')}
-          >
-            Day
-          </button>
+          <button className={`view-btn ${view === 'month'  ? 'active' : ''}`} onClick={() => setView('month')}>Month</button>
+          <button className={`view-btn ${view === 'week'   ? 'active' : ''}`} onClick={() => setView('week')}>Week</button>
+          <button className={`view-btn ${view === 'day'    ? 'active' : ''}`} onClick={() => setView('day')}>Day</button>
+          <button className={`view-btn ${view === 'agenda' ? 'active' : ''}`} onClick={() => setView('agenda')}>List</button>
         </div>
 
         <div className="legend">
-          <div className="legend-item">
-            <span className="legend-dot move-in"></span>
-            <span>Move In</span>
-          </div>
-          <div className="legend-item">
-            <span className="legend-dot move-out"></span>
-            <span>Move Out</span>
-          </div>
-          <div className="legend-item">
-            <span className="legend-dot delivery"></span>
-            <span>Delivery</span>
-          </div>
-          <div className="legend-item">
-            <span className="legend-dot reno"></span>
-            <span>Renovation</span>
-          </div>
+          <div className="legend-item"><span className="legend-dot move-in"></span><span>Move In</span></div>
+          <div className="legend-item"><span className="legend-dot move-out"></span><span>Move Out</span></div>
+          <div className="legend-item"><span className="legend-dot delivery"></span><span>Delivery</span></div>
+          <div className="legend-item"><span className="legend-dot reno"></span><span>Renovation</span></div>
         </div>
       </div>
 
@@ -191,18 +180,18 @@ export function PublicCalendarPage() {
           events={events}
           startAccessor="start"
           endAccessor="end"
-          views={['month', 'week', 'day']}
+          views={['month', 'week', 'day', 'agenda']}
           view={view}
           onView={setView}
           date={date}
           onNavigate={setDate}
           eventPropGetter={eventStyleGetter}
-          style={{ height: 600 }}
+          style={{ height: calHeight }}
           popup
         />
       </div>
 
-      {/* Upcoming Events Mobile List */}
+      {/* Upcoming Events */}
       <div className="upcoming-list">
         <h3 className="upcoming-title">Next 5 Reservations</h3>
         {upcomingEvents.length === 0 ? (
@@ -215,20 +204,16 @@ export function PublicCalendarPage() {
             {upcomingEvents.map((event, idx) => {
               const resource = event.resource as any;
               const typeColors: Record<string, string> = {
-                'MOVE_IN': 'move-in',
-                'MOVE_OUT': 'move-out',
-                'DELIVERY': 'delivery',
-                'RENO': 'reno'
+                MOVE_IN: 'move-in', MOVE_OUT: 'move-out', DELIVERY: 'delivery', RENO: 'reno',
               };
               const colorClass = typeColors[resource.moveType] || 'default';
-
               return (
                 <div key={idx} className={`event-card ${colorClass}`}>
                   <div className="event-type-badge">{resource.displayType}</div>
                   <div className="event-details">
                     <div className="event-unit">Unit {resource.unit}</div>
                     <div className="event-time">
-                      {dayjs(event.start).format('MMM D, YYYY • h:mm A')} - {dayjs(event.end).format('h:mm A')}
+                      {dayjs(event.start).format('MMM D, YYYY • h:mm A')} – {dayjs(event.end).format('h:mm A')}
                     </div>
                   </div>
                 </div>
