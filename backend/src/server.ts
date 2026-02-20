@@ -41,7 +41,14 @@ await app.register(multipart, { limits: { fileSize: 10 * 1024 * 1024, files: 1 }
 
 const uploadsRoot = path.resolve(config.uploadsDir);
 await fs.mkdir(uploadsRoot, { recursive: true });
-await app.register(staticPlugin, { root: uploadsRoot, prefix: '/uploads/' });
+await app.register(staticPlugin, {
+  root: uploadsRoot,
+  prefix: '/uploads/',
+  setHeaders: (res, filePath) => {
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Content-Disposition', `attachment; filename="${path.basename(filePath)}"`);
+  }
+});
 
 const frontendDist = path.resolve('frontend', 'dist');
 const hasFrontend = await fs

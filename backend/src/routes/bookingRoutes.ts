@@ -178,6 +178,10 @@ export async function bookingRoutes(app: FastifyInstance) {
   app.post('/api/admin/bookings/:id/documents', { preHandler: [requireRole([UserRole.CONCIERGE, UserRole.COUNCIL, UserRole.PROPERTY_MANAGER])] }, async (req) => {
     const data = await req.file();
     if (!data) throw new Error('No file');
+    const allowedMime = new Set(['application/pdf', 'image/jpeg', 'image/png']);
+    if (!allowedMime.has(data.mimetype)) {
+      throw new Error('Unsupported file type');
+    }
     const id = (req.params as { id: string }).id;
     const uploadsRoot = path.resolve(config.uploadsDir);
     await fs.mkdir(uploadsRoot, { recursive: true });

@@ -13,7 +13,7 @@ export async function adminRoutes(app: FastifyInstance) {
     const in30 = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
     const [upcoming, pending, monthly] = await Promise.all([
       prisma.booking.count({ where: { startDatetime: { gte: now, lte: in30 } } }),
-      prisma.booking.count({ where: { status: 'PENDING' } }),
+      prisma.booking.count({ where: { status: { in: [BookingStatus.PENDING, BookingStatus.SUBMITTED] } } }),
       prisma.booking.count({ where: { moveDate: { gte: new Date(now.getFullYear(), now.getMonth(), 1) } } })
     ]);
     return { upcoming30Days: upcoming, pendingApprovals: pending, monthlyStats: monthly };
