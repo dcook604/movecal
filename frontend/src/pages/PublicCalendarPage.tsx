@@ -56,8 +56,11 @@ export function PublicCalendarPage() {
   const upcomingEvents = useMemo(() => {
     const now = new Date();
     return events
-      .filter(e => e.start >= now)
-      .sort((a, b) => a.start.getTime() - b.start.getTime())
+      .filter(e => e.start && e.start >= now)
+      .sort((a, b) => {
+        if (!a.start || !b.start) return 0;
+        return a.start.getTime() - b.start.getTime();
+      })
       .slice(0, 5);
   }, [events]);
 
@@ -65,6 +68,7 @@ export function PublicCalendarPage() {
     const today = dayjs().startOf('day');
     const tomorrow = today.add(1, 'day');
     return events.filter(e => {
+      if (!e.start) return false;
       const eventDate = dayjs(e.start);
       return eventDate.isAfter(today) && eventDate.isBefore(tomorrow);
     });
