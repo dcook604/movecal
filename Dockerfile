@@ -9,7 +9,9 @@ COPY package.json package.json
 COPY backend/package.json backend/package.json
 COPY frontend/package.json frontend/package.json
 
-RUN npm install
+RUN apk add --no-cache openssl
+# Ensure dev deps are installed for build tools like tsc even if NODE_ENV is set in the build environment.
+RUN npm install --include=dev
 
 COPY backend backend
 COPY frontend frontend
