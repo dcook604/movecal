@@ -2,7 +2,7 @@ import { FormEvent, useEffect, useState } from 'react';
 import axios from 'axios';
 import { api, setToken } from '../api';
 
-const emptyRecipient = { name: '', email: '', enabled: true, notifyOn: ['APPROVED'] };
+const emptyRecipient = { name: '', email: '', enabled: true, notifyOn: ['APPROVED', 'REJECTED', 'SUBMITTED'] };
 type UserRole = 'CONCIERGE' | 'COUNCIL' | 'PROPERTY_MANAGER';
 
 function decodeRoleFromToken(token?: string): UserRole | null {
@@ -132,6 +132,42 @@ export function AdminPage() {
     }
   };
 
+  const toggleRecipientEnabled = async (id: string, enabled: boolean) => {
+    if (!canManageSettings) return;
+    setActionMessage('');
+    try {
+      await api.patch(`/api/admin/recipients/${id}`, { enabled });
+      setActionMessage(`Recipient ${enabled ? 'enabled' : 'disabled'} successfully`);
+      await refresh();
+    } catch (error: any) {
+      const errorMsg = error.response?.data?.message || 'Failed to update recipient.';
+      setActionMessage(errorMsg);
+    }
+  };
+
+  const deleteRecipient = async (id: string, email: string) => {
+    if (!canManageSettings) return;
+    if (!confirm(`Are you sure you want to delete recipient ${email}?`)) return;
+
+    setActionMessage('');
+    try {
+      await api.delete(`/api/admin/recipients/${id}`);
+      setActionMessage('Recipient deleted successfully');
+      await refresh();
+    } catch (error: any) {
+      const errorMsg = error.response?.data?.message || 'Failed to delete recipient.';
+      setActionMessage(errorMsg);
+    }
+  };
+
+  const toggleRecipientEvent = (event: string) => {
+    const current = recipientForm.notifyOn || [];
+    const updated = current.includes(event)
+      ? current.filter((e: string) => e !== event)
+      : [...current, event];
+    setRecipientForm({ ...recipientForm, notifyOn: updated });
+  };
+
   const saveSettings = async (e: FormEvent) => {
     e.preventDefault();
     if (!canManageSettings) {
@@ -234,13 +270,131 @@ export function AdminPage() {
       {canManageSettings ? (
         <>
           <h3>Notification Recipients</h3>
-          {recipients.map((r) => (
-            <div key={r.id}>{r.email} ({r.enabled ? 'enabled' : 'disabled'})</div>
-          ))}
-          <form onSubmit={createRecipient}>
-            <input placeholder="Name" value={recipientForm.name} onChange={(e) => setRecipientForm({ ...recipientForm, name: e.target.value })} />
-            <input placeholder="Email" value={recipientForm.email} onChange={(e) => setRecipientForm({ ...recipientForm, email: e.target.value })} />
-            <button>Add Recipient</button>
+          <p style={{ fontSize: '0.875rem', color: '#64748b', marginBottom: '16px' }}>
+            Configure who receives email notifications for different booking events
+          </p>
+
+          {recipients.length === 0 ? (
+            <p style={{ color: '#64748b', fontStyle: 'italic' }}>No recipients configured yet</p>
+          ) : (
+            <div style={{ marginBottom: '24px' }}>
+              {recipients.map((r) => (
+                <div key={r.id} style={{
+                  border: '1px solid #e2e8f0',
+                  borderRadius: '8px',
+                  padding: '12px',
+                  marginBottom: '12px',
+                  backgroundColor: r.enabled ? '#ffffff' : '#f8fafc'
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: '8px' }}>
+                    <div>
+                      <div style={{ fontWeight: 600, color: '#0f172a' }}>
+                        {r.name || r.email}
+                      </div>
+                      {r.name && (
+                        <div style={{ fontSize: '0.875rem', color: '#64748b' }}>{r.email}</div>
+                      )}
+                    </div>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <button
+                        type="button"
+                        onClick={() => toggleRecipientEnabled(r.id, !r.enabled)}
+                        style={{
+                          padding: '4px 12px',
+                          fontSize: '0.875rem',
+                          background: r.enabled ? '#10b981' : '#64748b',
+                          minHeight: 'auto',
+                          width: 'auto'
+                        }}
+                      >
+                        {r.enabled ? 'Enabled' : 'Disabled'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => deleteRecipient(r.id, r.email)}
+                        style={{
+                          padding: '4px 12px',
+                          fontSize: '0.875rem',
+                          background: '#dc2626',
+                          minHeight: 'auto',
+                          width: 'auto'
+                        }}
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </div>
+                  <div style={{ fontSize: '0.875rem', color: '#64748b' }}>
+                    <strong>Notify on:</strong>{' '}
+                    {r.notifyOn && r.notifyOn.length > 0
+                      ? r.notifyOn.map((e: string) => {
+                          const labels: Record<string, string> = {
+                            'APPROVED': 'Approvals',
+                            'REJECTED': 'Rejections',
+                            'SUBMITTED': 'New Submissions'
+                          };
+                          return labels[e] || e;
+                        }).join(', ')
+                      : 'No events selected'
+                    }
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <h4>Add New Recipient</h4>
+          <form onSubmit={createRecipient} style={{ border: '1px solid #e2e8f0', borderRadius: '8px', padding: '16px', marginBottom: '24px' }}>
+            <div className="form-field">
+              <label htmlFor="recipient-name">Name (optional)</label>
+              <input
+                id="recipient-name"
+                placeholder="e.g. John Smith"
+                value={recipientForm.name}
+                onChange={(e) => setRecipientForm({ ...recipientForm, name: e.target.value })}
+              />
+            </div>
+            <div className="form-field">
+              <label htmlFor="recipient-email" className="required">Email</label>
+              <input
+                id="recipient-email"
+                type="email"
+                placeholder="john@example.com"
+                value={recipientForm.email}
+                onChange={(e) => setRecipientForm({ ...recipientForm, email: e.target.value })}
+                required
+              />
+            </div>
+            <div className="form-field">
+              <label>Notify on events:</label>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '8px' }}>
+                <label className="checkbox-label">
+                  <input
+                    type="checkbox"
+                    checked={recipientForm.notifyOn?.includes('SUBMITTED')}
+                    onChange={() => toggleRecipientEvent('SUBMITTED')}
+                  />
+                  <span>New Submissions - When residents submit move requests</span>
+                </label>
+                <label className="checkbox-label">
+                  <input
+                    type="checkbox"
+                    checked={recipientForm.notifyOn?.includes('APPROVED')}
+                    onChange={() => toggleRecipientEvent('APPROVED')}
+                  />
+                  <span>Approvals - When bookings are approved</span>
+                </label>
+                <label className="checkbox-label">
+                  <input
+                    type="checkbox"
+                    checked={recipientForm.notifyOn?.includes('REJECTED')}
+                    onChange={() => toggleRecipientEvent('REJECTED')}
+                  />
+                  <span>Rejections - When bookings are rejected</span>
+                </label>
+              </div>
+            </div>
+            <button type="submit">Add Recipient</button>
           </form>
 
           <h3>SMTP Settings</h3>

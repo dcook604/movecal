@@ -26,12 +26,22 @@ export function PublicCalendarPage() {
 
   const events = useMemo<Event[]>(
     () =>
-      rows.map((row) => ({
-        title: `${row.moveType} • Unit ${row.unit}`,
-        start: new Date(row.startDatetime),
-        end: new Date(row.endDatetime),
-        resource: row
-      })),
+      rows.map((row) => {
+        // Use shorter labels for better display in calendar
+        const typeLabels: Record<string, string> = {
+          'MOVE_IN': 'In',
+          'MOVE_OUT': 'Out',
+          'DELIVERY': 'Delivery'
+        };
+        const shortType = typeLabels[row.moveType] || row.moveType;
+
+        return {
+          title: `${shortType}: ${row.unit}`,
+          start: new Date(row.startDatetime),
+          end: new Date(row.endDatetime),
+          resource: row
+        };
+      }),
     [rows]
   );
 

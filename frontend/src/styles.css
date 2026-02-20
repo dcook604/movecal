@@ -71,3 +71,34 @@ textarea:focus {
     margin-right: 0;
   }
 }
+
+/* Calendar event styling for better visibility */
+.rbc-event {
+  font-size: 0.75rem !important;
+  padding: 2px 4px !important;
+  line-height: 1.2 !important;
+}
+
+.rbc-event-label {
+  font-size: 0.7rem !important;
+}
+
+.rbc-event-content {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Adjust calendar event font size for different views */
+.rbc-day-slot .rbc-event {
+  font-size: 0.7rem !important;
+}
+
+.rbc-month-view .rbc-event {
+  font-size: 0.65rem !important;
+  padding: 1px 3px !important;
+}
+
+.rbc-agenda-view .rbc-event {
+  font-size: 0.875rem !important;
+}
