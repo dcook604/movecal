@@ -12,27 +12,63 @@ export function ResidentSubmissionPage() {
   return (
     <form onSubmit={submit}>
       <h2>Move Request</h2>
-      <input placeholder="Resident Name" onChange={(e) => setForm({ ...form, residentName: e.target.value })} />
-      <input type="email" placeholder="Resident Email" onChange={(e) => setForm({ ...form, residentEmail: e.target.value })} />
-      <input placeholder="Resident Phone" onChange={(e) => setForm({ ...form, residentPhone: e.target.value })} />
-      <input placeholder="Unit" onChange={(e) => setForm({ ...form, unit: e.target.value })} />
-      <input type="date" placeholder="Move Date" onChange={(e) => setForm({ ...form, moveDate: e.target.value })} />
-      <input type="datetime-local" placeholder="Start" onChange={(e) => setForm({ ...form, startDatetime: e.target.value })} />
-      <input type="datetime-local" placeholder="End" onChange={(e) => setForm({ ...form, endDatetime: e.target.value })} />
-      <input placeholder="Notes" onChange={(e) => setForm({ ...form, notes: e.target.value })} />
-      <label>
+      <div className="form-field">
+        <label htmlFor="resident-name">Resident Name</label>
+        <input id="resident-name" placeholder="e.g. Jane Smith" onChange={(e) => setForm({ ...form, residentName: e.target.value })} />
+      </div>
+
+      <div className="form-field">
+        <label htmlFor="resident-email">Resident Email</label>
+        <input id="resident-email" type="email" placeholder="name@example.com" onChange={(e) => setForm({ ...form, residentEmail: e.target.value })} />
+      </div>
+
+      <div className="form-field">
+        <label htmlFor="resident-phone">Resident Phone</label>
+        <input id="resident-phone" placeholder="e.g. 604-555-1234" onChange={(e) => setForm({ ...form, residentPhone: e.target.value })} />
+      </div>
+
+      <div className="form-field">
+        <label htmlFor="unit">Unit</label>
+        <input id="unit" placeholder="e.g. 1204" onChange={(e) => setForm({ ...form, unit: e.target.value })} />
+      </div>
+
+      <div className="form-field">
+        <label htmlFor="move-type">Move Type</label>
+        <select id="move-type" onChange={(e) => setForm({ ...form, moveType: e.target.value })}>
+          <option>MOVE_IN</option>
+          <option>MOVE_OUT</option>
+          <option>DELIVERY</option>
+        </select>
+      </div>
+
+      <div className="form-field">
+        <label htmlFor="move-date">Move Date</label>
+        <input id="move-date" type="date" onChange={(e) => setForm({ ...form, moveDate: e.target.value })} />
+      </div>
+
+      <div className="form-field">
+        <label htmlFor="start-datetime">Start Date & Time</label>
+        <input id="start-datetime" type="datetime-local" onChange={(e) => setForm({ ...form, startDatetime: e.target.value })} />
+      </div>
+
+      <div className="form-field">
+        <label htmlFor="end-datetime">End Date & Time</label>
+        <input id="end-datetime" type="datetime-local" onChange={(e) => setForm({ ...form, endDatetime: e.target.value })} />
+      </div>
+
+      <div className="form-field">
+        <label htmlFor="notes">Notes</label>
+        <input id="notes" placeholder="Optional details" onChange={(e) => setForm({ ...form, notes: e.target.value })} />
+      </div>
+
+      <label className="checkbox-label">
         <input type="checkbox" checked={form.elevatorRequired} onChange={(e) => setForm({ ...form, elevatorRequired: e.target.checked })} />
         Elevator Required
       </label>
-      <label>
+      <label className="checkbox-label">
         <input type="checkbox" checked={form.loadingBayRequired} onChange={(e) => setForm({ ...form, loadingBayRequired: e.target.checked })} />
         Loading Bay Required
       </label>
-      <select onChange={(e) => setForm({ ...form, moveType: e.target.value })}>
-        <option>MOVE_IN</option>
-        <option>MOVE_OUT</option>
-        <option>DELIVERY</option>
-      </select>
       <button>Submit</button>
       <p>{message}</p>
     </form>

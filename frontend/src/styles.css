@@ -3,5 +3,7 @@ nav a { margin-right: 8px; color: #0f172a; text-decoration: none; }
 input, select, button { display: block; margin: 6px 0; padding: 8px; border-radius: 6px; border: 1px solid #cbd5e1; }
 button { cursor: pointer; background: #0ea5e9; color: white; border: none; }
 h2, h3 { color: #0f172a; }
-label { display: flex; align-items: center; gap: 8px; margin: 6px 0; }
-label input[type="checkbox"] { margin: 0; }
+.form-field { margin: 8px 0; }
+.form-field label { display: block; margin: 0 0 4px 0; color: #0f172a; font-weight: 600; }
+.checkbox-label { display: flex; align-items: center; gap: 8px; margin: 6px 0; }
+.checkbox-label input[type="checkbox"] { margin: 0; }
