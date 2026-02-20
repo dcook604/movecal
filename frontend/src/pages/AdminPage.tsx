@@ -38,6 +38,11 @@ export function AdminPage() {
   const [isUpdating, setIsUpdating] = useState<string | null>(null);
   const [actionMessage, setActionMessage] = useState('');
 
+  // Account settings state
+  const [passwordForm, setPasswordForm] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' });
+  const [emailForm, setEmailForm] = useState({ newEmail: '', password: '' });
+  const [accountMessage, setAccountMessage] = useState('');
+
   const canManageSettings = role === 'COUNCIL' || role === 'PROPERTY_MANAGER';
 
   const refresh = async () => {
@@ -207,6 +212,60 @@ export function AdminPage() {
     }
   };
 
+  const changePassword = async (e: FormEvent) => {
+    e.preventDefault();
+    setAccountMessage('');
+
+    if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+      setAccountMessage('New passwords do not match');
+      return;
+    }
+
+    if (passwordForm.newPassword.length < 8) {
+      setAccountMessage('Password must be at least 8 characters');
+      return;
+    }
+
+    try {
+      await api.post('/api/auth/change-password', {
+        currentPassword: passwordForm.currentPassword,
+        newPassword: passwordForm.newPassword,
+        confirmPassword: passwordForm.confirmPassword
+      });
+      setAccountMessage('Password changed successfully');
+      setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
+    } catch (error: any) {
+      const errorMsg = error.response?.data?.message || 'Failed to change password';
+      setAccountMessage(errorMsg);
+    }
+  };
+
+  const changeEmail = async (e: FormEvent) => {
+    e.preventDefault();
+    setAccountMessage('');
+
+    try {
+      const response = await api.post('/api/auth/change-email', {
+        newEmail: emailForm.newEmail,
+        password: emailForm.password
+      });
+
+      // Update token and email
+      if (response.data.token) {
+        updateToken(response.data.token);
+        setToken(response.data.token);
+        localStorage.setItem('movecal_token', response.data.token);
+        setEmail(response.data.user.email);
+      }
+
+      setAccountMessage('Email changed successfully');
+      setEmailForm({ newEmail: '', password: '' });
+    } catch (error: any) {
+      const errorMsg = error.response?.data?.message || 'Failed to change email';
+      setAccountMessage(errorMsg);
+    }
+  };
+
   if (!token) {
     return (
       <form onSubmit={login}>
@@ -235,6 +294,86 @@ export function AdminPage() {
       </button>
       {loadError ? <p className="error-message">{loadError}</p> : null}
       {actionMessage && <p className={actionMessage.includes('success') ? 'success-message' : 'error-message'}>{actionMessage}</p>}
+
+      {/* Account Settings */}
+      <div style={{ marginTop: '32px', marginBottom: '32px' }}>
+        <h3>Account Settings</h3>
+        {accountMessage && <p className={accountMessage.includes('success') ? 'success-message' : 'error-message'}>{accountMessage}</p>}
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px', marginTop: '16px' }}>
+          {/* Change Password */}
+          <div style={{ border: '1px solid #e2e8f0', borderRadius: '8px', padding: '16px' }}>
+            <h4 style={{ marginTop: 0 }}>Change Password</h4>
+            <form onSubmit={changePassword}>
+              <div className="form-field">
+                <label htmlFor="current-password">Current Password</label>
+                <input
+                  id="current-password"
+                  type="password"
+                  value={passwordForm.currentPassword}
+                  onChange={(e) => setPasswordForm({ ...passwordForm, currentPassword: e.target.value })}
+                  required
+                />
+              </div>
+              <div className="form-field">
+                <label htmlFor="new-password">New Password</label>
+                <input
+                  id="new-password"
+                  type="password"
+                  value={passwordForm.newPassword}
+                  onChange={(e) => setPasswordForm({ ...passwordForm, newPassword: e.target.value })}
+                  minLength={8}
+                  required
+                />
+                <small style={{ color: '#64748b', fontSize: '0.75rem' }}>Minimum 8 characters</small>
+              </div>
+              <div className="form-field">
+                <label htmlFor="confirm-password">Confirm New Password</label>
+                <input
+                  id="confirm-password"
+                  type="password"
+                  value={passwordForm.confirmPassword}
+                  onChange={(e) => setPasswordForm({ ...passwordForm, confirmPassword: e.target.value })}
+                  required
+                />
+              </div>
+              <button type="submit">Change Password</button>
+            </form>
+          </div>
+
+          {/* Change Email */}
+          <div style={{ border: '1px solid #e2e8f0', borderRadius: '8px', padding: '16px' }}>
+            <h4 style={{ marginTop: 0 }}>Change Email</h4>
+            <p style={{ fontSize: '0.875rem', color: '#64748b', marginBottom: '16px' }}>
+              Current: <strong>{email}</strong>
+            </p>
+            <form onSubmit={changeEmail}>
+              <div className="form-field">
+                <label htmlFor="new-email">New Email</label>
+                <input
+                  id="new-email"
+                  type="email"
+                  value={emailForm.newEmail}
+                  onChange={(e) => setEmailForm({ ...emailForm, newEmail: e.target.value })}
+                  required
+                />
+              </div>
+              <div className="form-field">
+                <label htmlFor="confirm-password-email">Confirm Password</label>
+                <input
+                  id="confirm-password-email"
+                  type="password"
+                  value={emailForm.password}
+                  onChange={(e) => setEmailForm({ ...emailForm, password: e.target.value })}
+                  required
+                />
+                <small style={{ color: '#64748b', fontSize: '0.75rem' }}>Enter your current password to confirm</small>
+              </div>
+              <button type="submit">Change Email</button>
+            </form>
+          </div>
+        </div>
+      </div>
 
       <div className="stats-section">
         <h3>Statistics</h3>

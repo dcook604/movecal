@@ -6,7 +6,7 @@ import { stringify } from 'csv-stringify/sync';
 import { prisma } from '../prisma.js';
 import { config } from '../config.js';
 import { assertNoConflict } from '../services/conflictService.js';
-import { requireRole } from '../middleware/auth.js';
+import { requireAuth, requireRole } from '../middleware/auth.js';
 import { validateMoveTime } from '../utils/moveTimeValidator.js';
 
 const intakeSchema = z.object({
@@ -48,6 +48,82 @@ export async function systemRoutes(app: FastifyInstance) {
     }
     const token = await reply.jwtSign({ id: user.id, role: user.role, email: user.email, name: user.name });
     return { token, user: { id: user.id, role: user.role, name: user.name, email: user.email } };
+  });
+
+  // Change password endpoint
+  app.post('/api/auth/change-password', { preHandler: [requireAuth] }, async (req, reply) => {
+    const body = z.object({
+      currentPassword: z.string().min(1),
+      newPassword: z.string().min(8, 'Password must be at least 8 characters'),
+      confirmPassword: z.string().min(1)
+    }).parse(req.body);
+
+    // Verify passwords match
+    if (body.newPassword !== body.confirmPassword) {
+      return reply.status(400).send({ message: 'New passwords do not match' });
+    }
+
+    const user = await prisma.user.findUniqueOrThrow({ where: { id: req.user.id } });
+
+    // Verify current password
+    const isValidPassword = await bcrypt.compare(body.currentPassword, user.passwordHash);
+    if (!isValidPassword) {
+      return reply.status(401).send({ message: 'Current password is incorrect' });
+    }
+
+    // Hash new password
+    const newPasswordHash = await bcrypt.hash(body.newPassword, 10);
+
+    // Update password
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { passwordHash: newPasswordHash }
+    });
+
+    return { message: 'Password changed successfully' };
+  });
+
+  // Change email endpoint
+  app.post('/api/auth/change-email', { preHandler: [requireAuth] }, async (req, reply) => {
+    const body = z.object({
+      newEmail: z.string().email(),
+      password: z.string().min(1)
+    }).parse(req.body);
+
+    const user = await prisma.user.findUniqueOrThrow({ where: { id: req.user.id } });
+
+    // Verify password
+    const isValidPassword = await bcrypt.compare(body.password, user.passwordHash);
+    if (!isValidPassword) {
+      return reply.status(401).send({ message: 'Password is incorrect' });
+    }
+
+    // Check if email is already in use
+    const normalizedEmail = body.newEmail.trim().toLowerCase();
+    const existingUser = await prisma.user.findUnique({ where: { email: normalizedEmail } });
+    if (existingUser && existingUser.id !== user.id) {
+      return reply.status(400).send({ message: 'Email is already in use' });
+    }
+
+    // Update email
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { email: normalizedEmail }
+    });
+
+    // Generate new token with updated email
+    const token = await reply.jwtSign({
+      id: user.id,
+      role: user.role,
+      email: normalizedEmail,
+      name: user.name
+    });
+
+    return {
+      message: 'Email changed successfully',
+      token,
+      user: { id: user.id, role: user.role, name: user.name, email: normalizedEmail }
+    };
   });
 
   app.post('/api/intake/email', async (req, reply) => {
