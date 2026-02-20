@@ -30,6 +30,10 @@ Production-ready starter for Strata Move-In/Move-Out + Elevator Booking.
    ```bash
    npx tsx backend/src/seed.ts
    ```
+   In production containers built from this Dockerfile (no `backend/src` present), use:
+   ```bash
+   node backend/dist/seed.js
+   ```
 6. Start apps:
    ```bash
    npm run dev
@@ -71,7 +75,8 @@ npm test
   - `npm run prisma:generate -w backend`
   - `npm run prisma:migrate -w backend`
 - Seed initial users (once):
-  - `npx tsx backend/src/seed.ts`
+  - `node backend/dist/seed.js` (inside production container)
+  - `npx tsx backend/src/seed.ts` (local dev checkout)
 - Ensure uploads storage is persisted/mounted for `UPLOADS_DIR`.
 - Health check path: `GET /health` on backend.
 

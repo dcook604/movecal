@@ -32,7 +32,8 @@ function sanitizeCsvValue(value: string) {
 export async function systemRoutes(app: FastifyInstance) {
   app.post('/api/auth/login', async (req, reply) => {
     const body = z.object({ email: z.string().email(), password: z.string().min(1) }).parse(req.body);
-    const user = await prisma.user.findUnique({ where: { email: body.email } });
+    const normalizedEmail = body.email.trim().toLowerCase();
+    const user = await prisma.user.findUnique({ where: { email: normalizedEmail } });
     if (!user || !(await bcrypt.compare(body.password, user.passwordHash))) {
       return reply.status(401).send({ message: 'Invalid credentials' });
     }
