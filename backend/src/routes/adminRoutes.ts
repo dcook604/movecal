@@ -11,13 +11,14 @@ import { logAudit } from '../services/auditService.js';
 export async function adminRoutes(app: FastifyInstance) {
   app.get('/api/admin/stats', { preHandler: [requireRole([UserRole.CONCIERGE, UserRole.COUNCIL, UserRole.PROPERTY_MANAGER])] }, async () => {
     const now = new Date();
-    const in30 = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
-    const [upcoming, pending, monthly] = await Promise.all([
-      prisma.booking.count({ where: { startDatetime: { gte: now, lte: in30 } } }),
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const [total, approved, pending, thisMonth] = await Promise.all([
+      prisma.booking.count(),
+      prisma.booking.count({ where: { status: BookingStatus.APPROVED } }),
       prisma.booking.count({ where: { status: { in: [BookingStatus.PENDING, BookingStatus.SUBMITTED] } } }),
-      prisma.booking.count({ where: { moveDate: { gte: new Date(now.getFullYear(), now.getMonth(), 1) } } })
+      prisma.booking.count({ where: { moveDate: { gte: monthStart } } }),
     ]);
-    return { upcoming30Days: upcoming, pendingApprovals: pending, monthlyStats: monthly };
+    return { totalBookings: total, approvedBookings: approved, pendingBookings: pending, bookingsThisMonth: thisMonth };
   });
 
   app.get('/api/admin/settings', { preHandler: [requireRole([UserRole.COUNCIL, UserRole.PROPERTY_MANAGER])] }, async () => {
