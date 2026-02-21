@@ -8,7 +8,7 @@ import { nanoid } from 'nanoid';
 import { prisma } from '../prisma.js';
 import { assertNoConflict } from '../services/conflictService.js';
 import { requireAuth, requireRole } from '../middleware/auth.js';
-import { sendEmail, sendNotificationRecipients } from '../services/emailService.js';
+import { sendEmail, sendNotificationRecipients, bookingDetailsHtml, emailWrapper } from '../services/emailService.js';
 import { logAudit } from '../services/auditService.js';
 import { config } from '../config.js';
 import { validateMoveTime } from '../utils/moveTimeValidator.js';
@@ -72,14 +72,34 @@ export async function bookingRoutes(app: FastifyInstance) {
       });
     });
 
-    await sendNotificationRecipients(prisma, NotifyEvent.SUBMITTED, 'New booking submitted', `<p>Booking ${booking.id} submitted.</p>`)
-      .catch((err) => {
-        app.log.error({ err, bookingId: booking.id, event: 'SUBMITTED' }, 'Failed to send notification email');
-      });
-    await sendEmail(prisma, body.residentEmail, 'Booking request submitted', `<p>Your booking request ${booking.id} has been submitted and will be reviewed. If no action is taken within 24 hours, it will be automatically approved.</p>`)
-      .catch((err) => {
-        app.log.error({ err, bookingId: booking.id, email: body.residentEmail }, 'Failed to send booking confirmation email');
-      });
+    const moveTypeLabel = { MOVE_IN: 'Move In', MOVE_OUT: 'Move Out', DELIVERY: 'Delivery', RENO: 'Renovation' }[booking.moveType] ?? booking.moveType;
+    const submittedSubject = `Booking Request Received — ${moveTypeLabel} on ${dayjs(booking.startDatetime).format('MMM D, YYYY')}`;
+
+    await sendNotificationRecipients(
+      prisma,
+      NotifyEvent.SUBMITTED,
+      `New Booking Request — ${moveTypeLabel} for Unit ${booking.unit}`,
+      emailWrapper(
+        'New Booking Request',
+        'A new booking request has been submitted and is awaiting review.',
+        bookingDetailsHtml(booking, true)
+      )
+    ).catch((err) => {
+      app.log.error({ err, bookingId: booking.id, event: 'SUBMITTED' }, 'Failed to send notification email');
+    });
+
+    await sendEmail(
+      prisma,
+      body.residentEmail,
+      submittedSubject,
+      emailWrapper(
+        'Booking Request Received',
+        'Your booking request has been submitted and is pending review. If no action is taken within 24 hours, it will be automatically approved.',
+        bookingDetailsHtml(booking)
+      )
+    ).catch((err) => {
+      app.log.error({ err, bookingId: booking.id, email: body.residentEmail }, 'Failed to send booking confirmation email');
+    });
 
     return booking;
   });
@@ -198,25 +218,69 @@ export async function bookingRoutes(app: FastifyInstance) {
 
     if (body.status === BookingStatus.APPROVED) {
       const settings = await prisma.appSetting.findFirst();
-      const includeContact = settings?.includeResidentContactInApprovalEmails;
-      const details = `${updated.residentName} (${updated.unit}) ${dayjs(updated.startDatetime).format('MMM D h:mm A')} - ${dayjs(updated.endDatetime).format('h:mm A')}`;
-      const contact = includeContact ? `<p>${updated.residentEmail} ${updated.residentPhone}</p>` : '';
-      await sendEmail(prisma, updated.residentEmail, 'Booking approved', `<p>Approved: ${details}</p>${contact}`)
-        .catch((err) => {
-          app.log.error({ err, bookingId: updated.id, email: updated.residentEmail }, 'Failed to send booking approval email');
-        });
-      await sendNotificationRecipients(prisma, NotifyEvent.APPROVED, 'Booking approved', `<p>${details}</p>${contact}`)
-        .catch((err) => {
-          app.log.error({ err, bookingId: updated.id, event: 'APPROVED' }, 'Failed to send approval notification');
-        });
+      const includeContact = !!settings?.includeResidentContactInApprovalEmails;
+      const approvedMoveLabel = { MOVE_IN: 'Move In', MOVE_OUT: 'Move Out', DELIVERY: 'Delivery', RENO: 'Renovation' }[updated.moveType] ?? updated.moveType;
+      const approvedSubject = `Booking Approved — ${approvedMoveLabel} on ${dayjs(updated.startDatetime).format('MMM D, YYYY')}`;
+
+      await sendEmail(
+        prisma,
+        updated.residentEmail,
+        approvedSubject,
+        emailWrapper(
+          'Booking Approved',
+          'Your booking request has been approved. Please see the details below.',
+          bookingDetailsHtml(updated)
+        )
+      ).catch((err) => {
+        app.log.error({ err, bookingId: updated.id, email: updated.residentEmail }, 'Failed to send booking approval email');
+      });
+
+      await sendNotificationRecipients(
+        prisma,
+        NotifyEvent.APPROVED,
+        approvedSubject,
+        emailWrapper(
+          'Booking Approved',
+          'The following booking has been approved.',
+          bookingDetailsHtml(updated, includeContact)
+        )
+      ).catch((err) => {
+        app.log.error({ err, bookingId: updated.id, event: 'APPROVED' }, 'Failed to send approval notification');
+      });
+
       await logAudit(prisma, user.id, 'BOOKING_APPROVED', updated.id, { status: updated.status });
     }
 
     if (body.status === BookingStatus.REJECTED) {
-      await sendNotificationRecipients(prisma, NotifyEvent.REJECTED, 'Booking rejected', `<p>Booking ${updated.id} rejected.</p>`)
-        .catch((err) => {
-          app.log.error({ err, bookingId: updated.id, event: 'REJECTED' }, 'Failed to send rejection notification');
-        });
+      const rejectedMoveLabel = { MOVE_IN: 'Move In', MOVE_OUT: 'Move Out', DELIVERY: 'Delivery', RENO: 'Renovation' }[updated.moveType] ?? updated.moveType;
+      const rejectedSubject = `Booking Not Approved — ${rejectedMoveLabel} on ${dayjs(updated.startDatetime).format('MMM D, YYYY')}`;
+
+      await sendEmail(
+        prisma,
+        updated.residentEmail,
+        rejectedSubject,
+        emailWrapper(
+          'Booking Not Approved',
+          'Unfortunately your booking request could not be approved. Please contact building management if you have any questions.',
+          bookingDetailsHtml(updated)
+        )
+      ).catch((err) => {
+        app.log.error({ err, bookingId: updated.id, email: updated.residentEmail }, 'Failed to send booking rejection email');
+      });
+
+      await sendNotificationRecipients(
+        prisma,
+        NotifyEvent.REJECTED,
+        rejectedSubject,
+        emailWrapper(
+          'Booking Rejected',
+          'The following booking request has been rejected.',
+          bookingDetailsHtml(updated, true)
+        )
+      ).catch((err) => {
+        app.log.error({ err, bookingId: updated.id, event: 'REJECTED' }, 'Failed to send rejection notification');
+      });
+
       await logAudit(prisma, user.id, 'BOOKING_REJECTED', updated.id, { status: updated.status });
     }
 

@@ -1,7 +1,7 @@
 import { BookingStatus, NotifyEvent, UserRole } from '@prisma/client';
 import dayjs from 'dayjs';
 import { prisma } from '../prisma.js';
-import { sendEmail, sendNotificationRecipients } from './emailService.js';
+import { sendEmail, sendNotificationRecipients, bookingDetailsHtml, emailWrapper } from './emailService.js';
 import { logAudit } from './auditService.js';
 
 const AUTO_APPROVE_HOURS = 24;
@@ -31,19 +31,29 @@ export async function runAutoApproval() {
         }
       });
 
-      const details = `${booking.residentName} (${booking.unit}) ${dayjs(booking.startDatetime).format('MMM D h:mm A')} – ${dayjs(booking.endDatetime).format('h:mm A')}`;
+      const moveLabel = { MOVE_IN: 'Move In', MOVE_OUT: 'Move Out', DELIVERY: 'Delivery', RENO: 'Renovation' }[booking.moveType] ?? booking.moveType;
+      const autoSubject = `Booking Approved — ${moveLabel} on ${dayjs(booking.startDatetime).format('MMM D, YYYY')}`;
+
       await sendEmail(
         prisma,
         booking.residentEmail,
-        'Booking request approved',
-        `<p>Your booking request has been automatically approved.</p><p>${details}</p>`
+        autoSubject,
+        emailWrapper(
+          'Booking Approved',
+          'Your booking request has been automatically approved — no action was taken within 24 hours of submission.',
+          bookingDetailsHtml(booking)
+        )
       ).catch(() => {});
 
       await sendNotificationRecipients(
         prisma,
         NotifyEvent.APPROVED,
-        'Booking auto-approved',
-        `<p>${details} — auto-approved after 24h.</p>`
+        `Auto-Approved: ${moveLabel} — Unit ${booking.unit} on ${dayjs(booking.startDatetime).format('MMM D, YYYY')}`,
+        emailWrapper(
+          'Booking Auto-Approved',
+          'The following booking was automatically approved after 24 hours with no admin action.',
+          bookingDetailsHtml(booking, true)
+        )
       ).catch(() => {});
 
       await logAudit(prisma, systemUser.id, 'BOOKING_AUTO_APPROVED', booking.id, { reason: '24h_no_action' });
