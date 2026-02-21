@@ -1,36 +1,88 @@
 import dayjs from 'dayjs';
 
-// Canadian Statutory Holidays for 2025-2026
-// These should ideally be configurable in the database
-const STATUTORY_HOLIDAYS_2025 = [
+// BC Statutory Holidays 2025–2030
+// Fixed dates: New Year's Day, Canada Day, Remembrance Day, Christmas, Boxing Day
+// Calculated dates: Family Day (3rd Mon Feb), Good Friday, Victoria Day (Mon before May 25),
+//   BC Day (1st Mon Aug), Labour Day (1st Mon Sep), Thanksgiving (2nd Mon Oct)
+const STATUTORY_HOLIDAYS: string[] = [
+  // 2025
   '2025-01-01', // New Year's Day
-  '2025-02-17', // Family Day (BC)
+  '2025-02-17', // Family Day (BC) — 3rd Mon Feb
   '2025-04-18', // Good Friday
   '2025-05-19', // Victoria Day
   '2025-07-01', // Canada Day
-  '2025-08-04', // BC Day
-  '2025-09-01', // Labour Day
-  '2025-10-13', // Thanksgiving
+  '2025-08-04', // BC Day — 1st Mon Aug
+  '2025-09-01', // Labour Day — 1st Mon Sep
+  '2025-10-13', // Thanksgiving — 2nd Mon Oct
   '2025-11-11', // Remembrance Day
   '2025-12-25', // Christmas Day
   '2025-12-26', // Boxing Day
-];
 
-const STATUTORY_HOLIDAYS_2026 = [
+  // 2026
   '2026-01-01', // New Year's Day
-  '2026-02-16', // Family Day (BC)
+  '2026-02-16', // Family Day (BC) — 3rd Mon Feb
   '2026-04-03', // Good Friday
   '2026-05-18', // Victoria Day
   '2026-07-01', // Canada Day
-  '2026-08-03', // BC Day
-  '2026-09-07', // Labour Day
-  '2026-10-12', // Thanksgiving
+  '2026-08-03', // BC Day — 1st Mon Aug
+  '2026-09-07', // Labour Day — 1st Mon Sep
+  '2026-10-12', // Thanksgiving — 2nd Mon Oct
   '2026-11-11', // Remembrance Day
   '2026-12-25', // Christmas Day
   '2026-12-26', // Boxing Day
-];
 
-const ALL_STATUTORY_HOLIDAYS = [...STATUTORY_HOLIDAYS_2025, ...STATUTORY_HOLIDAYS_2026];
+  // 2027
+  '2027-01-01', // New Year's Day
+  '2027-02-15', // Family Day (BC) — 3rd Mon Feb
+  '2027-03-26', // Good Friday
+  '2027-05-24', // Victoria Day
+  '2027-07-01', // Canada Day
+  '2027-08-02', // BC Day — 1st Mon Aug
+  '2027-09-06', // Labour Day — 1st Mon Sep
+  '2027-10-11', // Thanksgiving — 2nd Mon Oct
+  '2027-11-11', // Remembrance Day
+  '2027-12-25', // Christmas Day
+  '2027-12-26', // Boxing Day
+
+  // 2028
+  '2028-01-01', // New Year's Day
+  '2028-02-21', // Family Day (BC) — 3rd Mon Feb
+  '2028-04-14', // Good Friday
+  '2028-05-22', // Victoria Day
+  '2028-07-01', // Canada Day
+  '2028-08-07', // BC Day — 1st Mon Aug
+  '2028-09-04', // Labour Day — 1st Mon Sep
+  '2028-10-09', // Thanksgiving — 2nd Mon Oct
+  '2028-11-11', // Remembrance Day
+  '2028-12-25', // Christmas Day
+  '2028-12-26', // Boxing Day
+
+  // 2029
+  '2029-01-01', // New Year's Day
+  '2029-02-19', // Family Day (BC) — 3rd Mon Feb
+  '2029-03-30', // Good Friday
+  '2029-05-21', // Victoria Day
+  '2029-07-01', // Canada Day
+  '2029-08-06', // BC Day — 1st Mon Aug
+  '2029-09-03', // Labour Day — 1st Mon Sep
+  '2029-10-08', // Thanksgiving — 2nd Mon Oct
+  '2029-11-11', // Remembrance Day
+  '2029-12-25', // Christmas Day
+  '2029-12-26', // Boxing Day
+
+  // 2030
+  '2030-01-01', // New Year's Day
+  '2030-02-18', // Family Day (BC) — 3rd Mon Feb
+  '2030-04-19', // Good Friday
+  '2030-05-20', // Victoria Day
+  '2030-07-01', // Canada Day
+  '2030-08-05', // BC Day — 1st Mon Aug
+  '2030-09-02', // Labour Day — 1st Mon Sep
+  '2030-10-14', // Thanksgiving — 2nd Mon Oct
+  '2030-11-11', // Remembrance Day
+  '2030-12-25', // Christmas Day
+  '2030-12-26', // Boxing Day
+];
 
 interface MoveTimeValidationResult {
   valid: boolean;
@@ -100,7 +152,7 @@ export function validateMoveTime(startDatetime: Date, endDatetime: Date, moveTyp
   const dayOfWeek = start.day(); // 0 = Sunday, 6 = Saturday
 
   // Check for statutory holiday
-  if (ALL_STATUTORY_HOLIDAYS.includes(dateStr)) {
+  if (STATUTORY_HOLIDAYS.includes(dateStr)) {
     return {
       valid: false,
       error: 'Bookings are not permitted on statutory holidays'
@@ -184,5 +236,5 @@ export function getPermittedMoveTimes(): string {
  */
 export function isStatutoryHoliday(date: Date): boolean {
   const dateStr = dayjs(date).format('YYYY-MM-DD');
-  return ALL_STATUTORY_HOLIDAYS.includes(dateStr);
+  return STATUTORY_HOLIDAYS.includes(dateStr);
 }
