@@ -219,7 +219,39 @@ export async function adminRoutes(app: FastifyInstance) {
       return reply.status(404).send({ message: 'User not found' });
     }
 
-    await prisma.user.delete({ where: { id: userId } });
+    // Prevent deleting the last CONCIERGE — it is used as the system user for public bookings
+    if (user.role === UserRole.CONCIERGE) {
+      const conciergeCount = await prisma.user.count({ where: { role: UserRole.CONCIERGE } });
+      if (conciergeCount <= 1) {
+        return reply.status(400).send({ message: 'Cannot delete the last concierge account — it is required for the system.' });
+      }
+    }
+
+    // Before deleting, re-home any FK references to this user.
+    // bookings.created_by and audit_log.actor_user_id are NOT NULL, so reassign them
+    // to the system concierge. bookings.approved_by is nullable so null it out.
+    const systemUser = await prisma.user.findFirst({
+      where: { role: UserRole.CONCIERGE, id: { not: userId } }
+    });
+    if (!systemUser) {
+      return reply.status(400).send({ message: 'No fallback concierge account found — cannot safely delete this user.' });
+    }
+
+    await prisma.$transaction([
+      prisma.booking.updateMany({
+        where: { createdById: userId },
+        data: { createdById: systemUser.id }
+      }),
+      prisma.booking.updateMany({
+        where: { approvedById: userId },
+        data: { approvedById: null }
+      }),
+      prisma.auditLog.updateMany({
+        where: { actorUserId: userId },
+        data: { actorUserId: systemUser.id }
+      }),
+      prisma.user.delete({ where: { id: userId } })
+    ]);
 
     await logAudit(prisma, req.user.id, 'USER_DELETED', undefined, {
       userId,
