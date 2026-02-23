@@ -18,6 +18,11 @@ const TYPE_LABELS: Record<string, string> = {
   RENO: 'Renovation',
 };
 
+// Strip the trailing 'Z' so the browser parses datetimes as wall-clock (local)
+// time rather than converting from UTC. The server stores times as UTC but the
+// values represent building-local time.
+const wall = (dt: string) => new Date(dt.replace('Z', ''));
+
 const TYPE_CLASS: Record<string, string> = {
   MOVE_IN: 'move-in',
   MOVE_OUT: 'move-out',
@@ -26,8 +31,8 @@ const TYPE_CLASS: Record<string, string> = {
 };
 
 function getBookingStatus(booking: PublicBooking, now: Date): 'completed' | 'active' | 'upcoming' {
-  const start = new Date(booking.startDatetime);
-  const end = new Date(booking.endDatetime);
+  const start = wall(booking.startDatetime);
+  const end = wall(booking.endDatetime);
   if (now >= end) return 'completed';
   if (now >= start) return 'active';
   return 'upcoming';
@@ -64,22 +69,22 @@ export function LobbyTVPage() {
     const end   = start.add(1, 'day');
     return bookings
       .filter((b) => {
-        const d = dayjs(b.startDatetime);
+        const d = dayjs(b.startDatetime.replace('Z', ''));
         return d.isAfter(start) && d.isBefore(end);
       })
-      .sort((a, b) => new Date(a.startDatetime).getTime() - new Date(b.startDatetime).getTime());
+      .sort((a, b) => wall(a.startDatetime).getTime() - wall(b.startDatetime).getTime());
   }, [bookings, now]);
 
   const upcomingEvents = useMemo(() => {
     const cutoff = dayjs().startOf('day');
     return bookings
-      .filter((b) => dayjs(b.startDatetime).isAfter(cutoff))
-      .sort((a, b) => new Date(a.startDatetime).getTime() - new Date(b.startDatetime).getTime())
+      .filter((b) => dayjs(b.startDatetime.replace('Z', '')).isAfter(cutoff))
+      .sort((a, b) => wall(a.startDatetime).getTime() - wall(b.startDatetime).getTime())
       .slice(0, 10);
   }, [bookings, now]);
 
   const isToday = (dt: string) => {
-    const d = dayjs(dt);
+    const d = dayjs(dt.replace('Z', ''));
     return d.isAfter(dayjs().startOf('day')) && d.isBefore(dayjs().endOf('day'));
   };
 
@@ -116,7 +121,7 @@ export function LobbyTVPage() {
                   </div>
                   <div className="tv-card-unit">Unit {b.unit}</div>
                   <div className="tv-card-time">
-                    {dayjs(b.startDatetime).format('h:mm A')} – {dayjs(b.endDatetime).format('h:mm A')}
+                    {dayjs(b.startDatetime.replace('Z', '')).format('h:mm A')} – {dayjs(b.endDatetime.replace('Z', '')).format('h:mm A')}
                   </div>
                 </div>
               );
@@ -137,13 +142,13 @@ export function LobbyTVPage() {
             upcomingEvents.map((b) => (
               <div key={b.id} className={`tv-upcoming-row ${isToday(b.startDatetime) ? 'is-today' : ''}`}>
                 <div className="tv-upcoming-date">
-                  <div className="tv-upcoming-day-num">{dayjs(b.startDatetime).format('D')}</div>
-                  <div className="tv-upcoming-day-name">{dayjs(b.startDatetime).format('MMM')}</div>
+                  <div className="tv-upcoming-day-num">{dayjs(b.startDatetime.replace('Z', '')).format('D')}</div>
+                  <div className="tv-upcoming-day-name">{dayjs(b.startDatetime.replace('Z', '')).format('MMM')}</div>
                 </div>
                 <div className="tv-upcoming-info">
                   <div className="tv-upcoming-unit">Unit {b.unit}</div>
                   <div className="tv-upcoming-detail">
-                    {dayjs(b.startDatetime).format('h:mm A')} – {dayjs(b.endDatetime).format('h:mm A')}
+                    {dayjs(b.startDatetime.replace('Z', '')).format('h:mm A')} – {dayjs(b.endDatetime.replace('Z', '')).format('h:mm A')}
                   </div>
                 </div>
                 <span className={`tv-upcoming-badge ${TYPE_CLASS[b.moveType] || ''}`}>

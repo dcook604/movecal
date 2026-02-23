@@ -78,8 +78,8 @@ export function PublicCalendarPage() {
         const fullType = typeLabels[row.moveType] || row.moveType;
         return {
           title: `${fullType} • Unit ${row.unit}`,
-          start: new Date(row.startDatetime),
-          end: new Date(row.endDatetime),
+          start: new Date(row.startDatetime.replace('Z', '')),
+          end: new Date(row.endDatetime.replace('Z', '')),
           resource: { ...row, displayType: fullType },
         };
       }),
