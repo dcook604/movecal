@@ -2,6 +2,84 @@ import { FormEvent, useEffect, useState } from 'react';
 import axios from 'axios';
 import { api, setToken } from '../api';
 import '../styles/admin.css';
+import dayjs from 'dayjs';
+
+// ── Time slot helpers (mirrors ResidentSubmissionPage) ────────
+type Slot = { label: string; start: string; end: string };
+
+const MOVE_WEEKDAY_SLOTS: Slot[] = [
+  { label: '10:00 AM – 1:00 PM', start: '10:00', end: '13:00' },
+  { label: '1:00 PM – 4:00 PM',  start: '13:00', end: '16:00' },
+];
+
+const MOVE_WEEKEND_SLOTS: Slot[] = [
+  { label: '8:00 AM – 11:00 AM', start: '08:00', end: '11:00' },
+  { label: '11:00 AM – 2:00 PM', start: '11:00', end: '14:00' },
+  { label: '2:00 PM – 5:00 PM',  start: '14:00', end: '17:00' },
+];
+
+const STATUTORY_HOLIDAYS = new Set([
+  '2025-01-01','2025-02-17','2025-04-18','2025-05-19',
+  '2025-07-01','2025-08-04','2025-09-01','2025-10-13',
+  '2025-11-11','2025-12-25','2025-12-26',
+  '2026-01-01','2026-02-16','2026-04-03','2026-05-18',
+  '2026-07-01','2026-08-03','2026-09-07','2026-10-12',
+  '2026-11-11','2026-12-25','2026-12-26',
+  '2027-01-01','2027-02-15','2027-03-26','2027-05-24',
+  '2027-07-01','2027-08-02','2027-09-06','2027-10-11',
+  '2027-11-11','2027-12-25','2027-12-26',
+  '2028-01-01','2028-02-21','2028-04-14','2028-05-22',
+  '2028-07-01','2028-08-07','2028-09-04','2028-10-09',
+  '2028-11-11','2028-12-25','2028-12-26',
+  '2029-01-01','2029-02-19','2029-03-30','2029-05-21',
+  '2029-07-01','2029-08-06','2029-09-03','2029-10-08',
+  '2029-11-11','2029-12-25','2029-12-26',
+  '2030-01-01','2030-02-18','2030-04-19','2030-05-20',
+  '2030-07-01','2030-08-05','2030-09-02','2030-10-14',
+  '2030-11-11','2030-12-25','2030-12-26',
+]);
+
+function minsToTimeStr(mins: number): string {
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+}
+
+function minsToLabel(mins: number): string {
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  const period = h < 12 ? 'AM' : 'PM';
+  const h12 = h % 12 === 0 ? 12 : h % 12;
+  return `${h12}:${String(m).padStart(2, '0')} ${period}`;
+}
+
+function generateTimeSlots(rangeStartMins: number, rangeEndMins: number, blockMins: number): Slot[] {
+  const slots: Slot[] = [];
+  for (let s = rangeStartMins; s + blockMins <= rangeEndMins; s += blockMins) {
+    slots.push({
+      label: `${minsToLabel(s)} – ${minsToLabel(s + blockMins)}`,
+      start: minsToTimeStr(s),
+      end:   minsToTimeStr(s + blockMins),
+    });
+  }
+  return slots;
+}
+
+function getSlotsForDateAndType(dateStr: string, moveType: string): Slot[] | null {
+  if (!dateStr) return null;
+  if (STATUTORY_HOLIDAYS.has(dateStr)) return [];
+  const dow = dayjs(dateStr).day();
+  const isWeekend = dow === 0 || dow === 6;
+  if (moveType === 'DELIVERY') {
+    const [rangeStart, rangeEnd] = isWeekend ? [8 * 60, 17 * 60] : [10 * 60, 16 * 60];
+    return generateTimeSlots(rangeStart, rangeEnd, 30);
+  }
+  if (moveType === 'RENO') {
+    const [rangeStart, rangeEnd] = isWeekend ? [8 * 60, 17 * 60] : [10 * 60, 16 * 60];
+    return generateTimeSlots(rangeStart, rangeEnd, 60);
+  }
+  return isWeekend ? MOVE_WEEKEND_SLOTS : MOVE_WEEKDAY_SLOTS;
+}
 
 const emptyRecipient = { name: '', email: '', enabled: true, notifyOn: ['APPROVED', 'REJECTED', 'SUBMITTED'] };
 type UserRole = 'CONCIERGE' | 'COUNCIL' | 'PROPERTY_MANAGER';
@@ -61,6 +139,17 @@ export function AdminPage() {
   const [userForm, setUserForm] = useState({ name: '', email: '', password: '', role: 'CONCIERGE' });
   const [editingUserId, setEditingUserId] = useState<string | null>(null);
   const [userMessage, setUserMessage] = useState('');
+
+  const emptyQuickEntry = {
+    residentName: '', residentEmail: '', residentPhone: '', unit: '',
+    moveType: 'MOVE_IN', companyName: '', moveDate: '', elevatorRequired: true,
+    loadingBayRequired: false, notes: '', publicUnitMask: '',
+  };
+  const [showQuickEntry, setShowQuickEntry] = useState(false);
+  const [quickForm, setQuickForm] = useState<any>(emptyQuickEntry);
+  const [quickSlot, setQuickSlot] = useState('');
+  const [quickError, setQuickError] = useState('');
+  const [isQuickSubmitting, setIsQuickSubmitting] = useState(false);
 
   const canManageSettings = role === 'COUNCIL' || role === 'PROPERTY_MANAGER';
 
@@ -319,6 +408,29 @@ export function AdminPage() {
     }
   };
 
+  const submitQuickEntry = async (e: FormEvent) => {
+    e.preventDefault();
+    setQuickError('');
+    const slots = getSlotsForDateAndType(quickForm.moveDate, quickForm.moveType);
+    const selected = slots?.find((s) => s.start === quickSlot);
+    if (!selected) { setQuickError('Please select a valid time slot.'); return; }
+    const startDatetime = `${quickForm.moveDate}T${selected.start}:00`;
+    const endDatetime   = `${quickForm.moveDate}T${selected.end}:00`;
+    setIsQuickSubmitting(true);
+    try {
+      await api.post('/api/admin/quick-entry/approve', { ...quickForm, startDatetime, endDatetime });
+      setQuickForm(emptyQuickEntry);
+      setQuickSlot('');
+      setShowQuickEntry(false);
+      await refresh();
+      setActionMessage('Booking created and approved successfully');
+    } catch (error: any) {
+      setQuickError(error.response?.data?.message || 'Failed to create booking.');
+    } finally {
+      setIsQuickSubmitting(false);
+    }
+  };
+
   /* ── Login screen ────────────────────────────────────────── */
   if (!token) {
     return (
@@ -483,6 +595,9 @@ export function AdminPage() {
         const past = bookings.filter((b) => new Date(b.startDatetime) < today)
           .sort((a, b) => new Date(b.startDatetime).getTime() - new Date(a.startDatetime).getTime());
 
+        const qSlots = getSlotsForDateAndType(quickForm.moveDate, quickForm.moveType);
+        const qIsHoliday = quickForm.moveDate && qSlots !== null && qSlots.length === 0;
+
         const renderBooking = (b: any) => (
           <div key={b.id} className="booking-card">
             <div className="booking-info">
@@ -508,7 +623,114 @@ export function AdminPage() {
 
         return (
           <div className="admin-section">
-            <h3>Bookings</h3>
+            <div className="bookings-section-header">
+              <h3>Bookings</h3>
+              <button type="button" className="quick-entry-toggle"
+                onClick={() => { setShowQuickEntry((v) => !v); setQuickError(''); }}>
+                {showQuickEntry ? 'Cancel' : 'Add Manual Booking ▾'}
+              </button>
+            </div>
+
+            {showQuickEntry && (
+              <div className="admin-form-card" style={{ marginTop: '16px' }}>
+                <h4>New Manual Booking</h4>
+                <form onSubmit={submitQuickEntry}>
+                  <div className="quick-entry-form-grid">
+                    <div className="form-field">
+                      <label htmlFor="qe-name" className="required">Resident Name</label>
+                      <input id="qe-name" value={quickForm.residentName}
+                        onChange={(e) => setQuickForm({ ...quickForm, residentName: e.target.value })}
+                        placeholder="e.g. Jane Smith" required />
+                    </div>
+                    <div className="form-field">
+                      <label htmlFor="qe-email" className="required">Resident Email</label>
+                      <input id="qe-email" type="email" value={quickForm.residentEmail}
+                        onChange={(e) => setQuickForm({ ...quickForm, residentEmail: e.target.value })}
+                        placeholder="name@example.com" required />
+                    </div>
+                    <div className="form-field">
+                      <label htmlFor="qe-phone" className="required">Resident Phone</label>
+                      <input id="qe-phone" value={quickForm.residentPhone}
+                        onChange={(e) => setQuickForm({ ...quickForm, residentPhone: e.target.value })}
+                        placeholder="e.g. 604-555-1234" required />
+                    </div>
+                    <div className="form-field">
+                      <label htmlFor="qe-unit" className="required">Unit</label>
+                      <input id="qe-unit" value={quickForm.unit}
+                        onChange={(e) => setQuickForm({ ...quickForm, unit: e.target.value })}
+                        placeholder="e.g. 1204" required />
+                    </div>
+                    <div className="form-field">
+                      <label htmlFor="qe-type" className="required">Booking Type</label>
+                      <select id="qe-type" value={quickForm.moveType}
+                        onChange={(e) => { setQuickForm({ ...quickForm, moveType: e.target.value }); setQuickSlot(''); }}>
+                        <option value="MOVE_IN">Move In</option>
+                        <option value="MOVE_OUT">Move Out</option>
+                        <option value="DELIVERY">Delivery</option>
+                        <option value="RENO">Renovation</option>
+                      </select>
+                    </div>
+                    <div className="form-field">
+                      <label htmlFor="qe-date" className="required">Date</label>
+                      <input id="qe-date" type="date" value={quickForm.moveDate}
+                        onChange={(e) => { setQuickForm({ ...quickForm, moveDate: e.target.value }); setQuickSlot(''); }}
+                        required />
+                    </div>
+                    <div className="form-field">
+                      <label htmlFor="qe-slot" className="required">Time Slot</label>
+                      <select id="qe-slot" value={quickSlot}
+                        onChange={(e) => setQuickSlot(e.target.value)}
+                        disabled={!quickForm.moveDate || !!qIsHoliday}
+                        required>
+                        <option value="">
+                          {!quickForm.moveDate ? 'Select a date first' : qIsHoliday ? 'No slots on holidays' : 'Select a time slot'}
+                        </option>
+                        {(qSlots ?? []).map((s) => (
+                          <option key={s.start} value={s.start}>{s.label}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="form-field">
+                      <label htmlFor="qe-company">Company Name</label>
+                      <input id="qe-company" value={quickForm.companyName}
+                        onChange={(e) => setQuickForm({ ...quickForm, companyName: e.target.value })}
+                        placeholder="e.g. ABC Movers (optional)" />
+                    </div>
+                  </div>
+                  <div className="form-field" style={{ marginTop: '12px' }}>
+                    <label htmlFor="qe-notes">Notes</label>
+                    <textarea id="qe-notes" rows={2} value={quickForm.notes}
+                      onChange={(e) => setQuickForm({ ...quickForm, notes: e.target.value })}
+                      placeholder="Optional details" />
+                  </div>
+                  <div className="form-field">
+                    <label htmlFor="qe-mask">Public Unit Mask</label>
+                    <input id="qe-mask" value={quickForm.publicUnitMask}
+                      onChange={(e) => setQuickForm({ ...quickForm, publicUnitMask: e.target.value })}
+                      placeholder="e.g. Unit 12xx (optional)" />
+                  </div>
+                  <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', marginTop: '4px' }}>
+                    <label className="checkbox-label">
+                      <input type="checkbox" checked={quickForm.elevatorRequired}
+                        onChange={(e) => setQuickForm({ ...quickForm, elevatorRequired: e.target.checked })} />
+                      Elevator Required
+                    </label>
+                    <label className="checkbox-label">
+                      <input type="checkbox" checked={quickForm.loadingBayRequired}
+                        onChange={(e) => setQuickForm({ ...quickForm, loadingBayRequired: e.target.checked })} />
+                      Loading Bay Required
+                    </label>
+                  </div>
+                  {qIsHoliday && <p className="error-message" style={{ marginTop: '12px' }}>This date is a statutory holiday — no bookings permitted.</p>}
+                  {quickError && <p className="error-message" style={{ marginTop: '12px' }}>{quickError}</p>}
+                  <button className="btn-sm btn-green" type="submit" style={{ marginTop: '16px' }}
+                    disabled={isQuickSubmitting || !!qIsHoliday}>
+                    {isQuickSubmitting ? 'Creating…' : 'Create Approved Booking'}
+                  </button>
+                </form>
+              </div>
+            )}
+
             <div className="bookings-list">
               {bookings.length === 0 && <p className="admin-section-desc">No bookings found.</p>}
 

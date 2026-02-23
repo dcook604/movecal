@@ -156,6 +156,44 @@
 .account-card h4   { margin: 0 0 16px; font-size: 1rem; }
 .account-card-desc { font-size: 0.875rem; color: #64748b; margin: 0 0 16px; }
 
+/* ── Bookings section header row ─────────────────────────────── */
+.bookings-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.bookings-section-header h3 { margin: 0; }
+
+.quick-entry-toggle {
+  background: none;
+  border: 1px solid #3b82f6;
+  border-radius: 6px;
+  color: #3b82f6;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 5px 14px;
+  white-space: nowrap;
+  min-height: unset;
+  width: auto;
+}
+
+.quick-entry-toggle:hover {
+  background: #eff6ff;
+  border-color: #2563eb;
+  color: #2563eb;
+}
+
+/* ── Quick entry 2-col form grid ────────────────────────────── */
+.quick-entry-form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0 20px;
+}
+
 /* ── Bookings list ───────────────────────────────────────────── */
 .bookings-list { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; }
 
@@ -338,6 +376,7 @@
   .booking-actions button { flex: 1; min-height: 40px; }
 
   .smtp-row { grid-template-columns: 1fr; }
+  .quick-entry-form-grid { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 480px) {
