@@ -107,6 +107,25 @@ export function PublicCalendarPage() {
     });
   }, [events]);
 
+  const scrollToTime = useMemo(() => {
+    const viewStart = dayjs(date).startOf(view === 'day' ? 'day' : 'week');
+    const viewEnd = viewStart.add(view === 'day' ? 1 : 7, 'day');
+    const viewEvents = events.filter(
+      (e) => e.start && dayjs(e.start).isAfter(viewStart) && dayjs(e.start).isBefore(viewEnd)
+    );
+    if (viewEvents.length === 0) {
+      return dayjs().startOf('day').add(8, 'hour').toDate();
+    }
+    const earliest = viewEvents.reduce((min, e) => {
+      if (!e.start) return min;
+      return e.start.getTime() < min.getTime() ? e.start : min;
+    }, viewEvents[0].start as Date);
+    // Scroll to 30 min before the earliest event, minimum 7am
+    const scrollTarget = dayjs(earliest).subtract(30, 'minute');
+    const floor = dayjs(earliest).startOf('day').add(7, 'hour');
+    return (scrollTarget.isBefore(floor) ? floor : scrollTarget).toDate();
+  }, [events, date, view]);
+
   const eventStyleGetter = (event: Event) => {
     const moveType = (event.resource as any)?.moveType;
     const colors: Record<string, { bg: string; border: string }> = {
@@ -228,6 +247,7 @@ export function PublicCalendarPage() {
           onNavigate={setDate}
           eventPropGetter={eventStyleGetter}
           style={{ height: calHeight }}
+          scrollToTime={scrollToTime}
           popup
         />
       </div>
