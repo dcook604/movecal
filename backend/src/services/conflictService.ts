@@ -6,7 +6,6 @@ import dayjs from 'dayjs';
 // Weekdays end at 16, weekends end at 17 → latest possible = 17
 const MOVE_START_HOUR = 8;
 const MOVE_END_HOUR = 17;
-const BUFFER_MINUTES = 60;
 
 export type ConflictCandidate = {
   id?: string;
@@ -28,8 +27,8 @@ export function validateMoveHours(startDatetime: Date, endDatetime: Date) {
 
 export function hasElevatorConflict(existing: Array<{ startDatetime: Date; endDatetime: Date; elevatorRequired: boolean }>, candidate: ConflictCandidate) {
   if (!candidate.elevatorRequired) return false;
-  const cStart = dayjs(candidate.startDatetime).subtract(BUFFER_MINUTES, 'minute');
-  const cEnd = dayjs(candidate.endDatetime).add(BUFFER_MINUTES, 'minute');
+  const cStart = dayjs(candidate.startDatetime);
+  const cEnd = dayjs(candidate.endDatetime);
 
   return existing.some((booking) => {
     if (!booking.elevatorRequired) return false;
@@ -46,13 +45,13 @@ export async function assertNoConflict(prismaTx: Prisma.TransactionClient, candi
       elevatorRequired: true,
       status: { in: [BookingStatus.SUBMITTED, BookingStatus.PENDING, BookingStatus.APPROVED] },
       id: candidate.id ? { not: candidate.id } : undefined,
-      startDatetime: { lte: dayjs(candidate.endDatetime).add(BUFFER_MINUTES, 'minute').toDate() },
-      endDatetime: { gte: dayjs(candidate.startDatetime).subtract(BUFFER_MINUTES, 'minute').toDate() }
+      startDatetime: { lte: candidate.endDatetime },
+      endDatetime: { gte: candidate.startDatetime }
     },
     select: { startDatetime: true, endDatetime: true, elevatorRequired: true }
   });
 
   if (!allowOverride && hasElevatorConflict(existing, candidate)) {
-    throw new Error('Elevator conflict detected with 60-minute buffer rule');
+    throw new Error('Elevator conflict detected');
   }
 }
