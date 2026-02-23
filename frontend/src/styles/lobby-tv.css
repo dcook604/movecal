@@ -114,11 +114,41 @@
 .tv-today-card.delivery { border-left-color: var(--tv-delivery); }
 .tv-today-card.reno     { border-left-color: var(--tv-reno);     }
 
+.tv-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
 .tv-card-type {
   font-size: 0.75rem;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.08em;
+}
+
+.tv-status-badge {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 3px 8px;
+  border-radius: 6px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.tv-status-badge.is-active {
+  background: rgba(34, 197, 94, 0.2);
+  color: #22c55e;
+  border: 1px solid rgba(34, 197, 94, 0.4);
+}
+
+.tv-status-badge.is-completed {
+  background: rgba(148, 163, 184, 0.15);
+  color: var(--tv-muted);
+  border: 1px solid rgba(148, 163, 184, 0.25);
 }
 .tv-today-card.move-in  .tv-card-type { color: var(--tv-move-in);  }
 .tv-today-card.move-out .tv-card-type { color: var(--tv-move-out); }
@@ -222,6 +252,28 @@
 .tv-upcoming-badge.move-out { background: var(--tv-move-out); }
 .tv-upcoming-badge.delivery { background: var(--tv-delivery); }
 .tv-upcoming-badge.reno     { background: var(--tv-reno);     }
+
+/* ── Today card status states ────────────────────────────────── */
+.tv-today-card.is-active {
+  box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.35), 0 4px 14px rgba(0, 0, 0, 0.3);
+  animation: tv-card-glow 2.5s ease-in-out infinite;
+}
+
+.tv-today-card.is-completed {
+  opacity: 0.45;
+  filter: grayscale(0.5);
+}
+
+.tv-today-card.is-completed .tv-card-unit,
+.tv-today-card.is-completed .tv-card-time {
+  text-decoration: line-through;
+  text-decoration-color: var(--tv-muted);
+}
+
+@keyframes tv-card-glow {
+  0%, 100% { box-shadow: 0 0 0 1px rgba(56,189,248,0.35), 0 4px 14px rgba(0,0,0,0.3); }
+  50%       { box-shadow: 0 0 0 3px rgba(56,189,248,0.2),  0 4px 20px rgba(0,0,0,0.4); }
+}
 
 /* ── Live indicator ──────────────────────────────────────────── */
 .tv-live-dot {

@@ -33,6 +33,7 @@ export function PublicCalendarPage() {
   const [date, setDate] = useState(new Date());
   const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
   const [calHeight, setCalHeight] = useState(getCalendarHeight);
+  const [now, setNow] = useState(new Date());
 
   useEffect(() => {
     const load = () => {
@@ -50,6 +51,12 @@ export function PublicCalendarPage() {
   useEffect(() => {
     const pageRefreshTimer = setInterval(() => { window.location.reload(); }, 3600000);
     return () => clearInterval(pageRefreshTimer);
+  }, []);
+
+  // Update now every minute so past events get styled correctly
+  useEffect(() => {
+    const t = setInterval(() => setNow(new Date()), 60000);
+    return () => clearInterval(t);
   }, []);
 
   // Update calendar height on resize
@@ -109,6 +116,40 @@ export function PublicCalendarPage() {
       RENO:      { bg: '#fef3c7', border: '#f59e0b' },
     };
     const color = colors[moveType] || { bg: '#f3f4f6', border: '#6b7280' };
+
+    const isPast   = event.end   && event.end   <= now;
+    const isActive = event.start && event.end   && event.start <= now && now < event.end;
+
+    if (isPast) {
+      return {
+        style: {
+          backgroundColor: '#f1f5f9',
+          borderLeft: '3px solid #94a3b8',
+          borderRadius: '4px',
+          color: '#94a3b8',
+          border: 'none',
+          outline: 'none',
+          opacity: 0.6,
+          textDecoration: 'line-through',
+        },
+      };
+    }
+
+    if (isActive) {
+      return {
+        style: {
+          backgroundColor: color.bg,
+          borderLeft: `3px solid ${color.border}`,
+          borderRadius: '4px',
+          color: '#1f2937',
+          border: `1px solid ${color.border}`,
+          outline: 'none',
+          boxShadow: `0 0 0 2px ${color.border}40`,
+          fontWeight: 600,
+        },
+      };
+    }
+
     return {
       style: {
         backgroundColor: color.bg,

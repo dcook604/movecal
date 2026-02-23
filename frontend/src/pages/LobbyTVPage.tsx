@@ -25,6 +25,14 @@ const TYPE_CLASS: Record<string, string> = {
   RENO: 'reno',
 };
 
+function getBookingStatus(booking: PublicBooking, now: Date): 'completed' | 'active' | 'upcoming' {
+  const start = new Date(booking.startDatetime);
+  const end = new Date(booking.endDatetime);
+  if (now >= end) return 'completed';
+  if (now >= start) return 'active';
+  return 'upcoming';
+}
+
 export function LobbyTVPage() {
   const [bookings, setBookings] = useState<PublicBooking[]>([]);
   const [now, setNow] = useState(new Date());
@@ -97,15 +105,22 @@ export function LobbyTVPage() {
           {todayEvents.length === 0 ? (
             <p className="tv-today-empty">No moves scheduled today</p>
           ) : (
-            todayEvents.map((b) => (
-              <div key={b.id} className={`tv-today-card ${TYPE_CLASS[b.moveType] || ''}`}>
-                <div className="tv-card-type">{TYPE_LABELS[b.moveType] || b.moveType}</div>
-                <div className="tv-card-unit">Unit {b.unit}</div>
-                <div className="tv-card-time">
-                  {dayjs(b.startDatetime).format('h:mm A')} – {dayjs(b.endDatetime).format('h:mm A')}
+            todayEvents.map((b) => {
+              const status = getBookingStatus(b, now);
+              return (
+                <div key={b.id} className={`tv-today-card ${TYPE_CLASS[b.moveType] || ''} is-${status}`}>
+                  <div className="tv-card-header">
+                    <div className="tv-card-type">{TYPE_LABELS[b.moveType] || b.moveType}</div>
+                    {status === 'active' && <span className="tv-status-badge is-active">In Progress</span>}
+                    {status === 'completed' && <span className="tv-status-badge is-completed">✓ Done</span>}
+                  </div>
+                  <div className="tv-card-unit">Unit {b.unit}</div>
+                  <div className="tv-card-time">
+                    {dayjs(b.startDatetime).format('h:mm A')} – {dayjs(b.endDatetime).format('h:mm A')}
+                  </div>
                 </div>
-              </div>
-            ))
+              );
+            })
           )}
         </div>
 
