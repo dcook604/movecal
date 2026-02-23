@@ -43,6 +43,16 @@ export function AdminPage() {
   const [isUpdating, setIsUpdating] = useState<string | null>(null);
   const [actionMessage, setActionMessage] = useState('');
 
+  const [showPastBookings, setShowPastBookings] = useState(false);
+
+  const [loginView, setLoginView] = useState<'login' | 'forgot' | 'reset'>('login');
+  const [forgotEmail, setForgotEmail] = useState('');
+  const [forgotMsg, setForgotMsg] = useState('');
+  const [resetToken, setResetToken] = useState('');
+  const [resetNewPassword, setResetNewPassword] = useState('');
+  const [resetConfirm, setResetConfirm] = useState('');
+  const [resetMsg, setResetMsg] = useState('');
+
   const [passwordForm, setPasswordForm] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' });
   const [emailForm, setEmailForm] = useState({ newEmail: '', password: '' });
   const [accountMessage, setAccountMessage] = useState('');
@@ -101,16 +111,36 @@ export function AdminPage() {
 
   useEffect(() => { if (!token) return; refresh(); }, [token]);
 
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const tok = params.get('reset');
+    if (tok) { setResetToken(tok); setLoginView('reset'); }
+  }, []);
+
   const updateStatus = async (id: string, status: string) => {
     if (!confirm(`Are you sure you want to ${status.toLowerCase()} this booking?`)) return;
     setIsUpdating(id);
     setActionMessage('');
     try {
       await api.patch(`/api/admin/bookings/${id}`, { status });
-      setActionMessage(`Booking ${status.toLowerCase()}d successfully`);
+      const label = status === 'APPROVED' ? 'approved' : status === 'REJECTED' ? 'rejected' : status.toLowerCase();
+      setActionMessage(`Booking ${label} successfully`);
       await refresh();
     } catch (error: any) {
       setActionMessage(error.response?.data?.message || `Failed to ${status.toLowerCase()} booking.`);
+    } finally { setIsUpdating(null); }
+  };
+
+  const deleteBooking = async (id: string, residentName: string) => {
+    if (!confirm(`Delete booking for ${residentName}? This cannot be undone.`)) return;
+    setIsUpdating(id);
+    setActionMessage('');
+    try {
+      await api.delete(`/api/admin/bookings/${id}`);
+      setActionMessage('Booking deleted successfully');
+      await refresh();
+    } catch (error: any) {
+      setActionMessage(error.response?.data?.message || 'Failed to delete booking.');
     } finally { setIsUpdating(null); }
   };
 
@@ -263,24 +293,99 @@ export function AdminPage() {
     setUserMessage('');
   };
 
+  const forgotPassword = async (e: FormEvent) => {
+    e.preventDefault();
+    setForgotMsg('');
+    try {
+      const { data } = await api.post('/api/auth/forgot-password', { email: forgotEmail.trim() });
+      setForgotMsg(data.message);
+    } catch {
+      setForgotMsg('Failed to send reset email. Please try again.');
+    }
+  };
+
+  const submitPasswordReset = async (e: FormEvent) => {
+    e.preventDefault();
+    setResetMsg('');
+    if (resetNewPassword !== resetConfirm) { setResetMsg('Passwords do not match.'); return; }
+    if (resetNewPassword.length < 8) { setResetMsg('Password must be at least 8 characters.'); return; }
+    try {
+      const { data } = await api.post('/api/auth/reset-password', { token: resetToken, password: resetNewPassword });
+      setResetMsg(data.message);
+      window.history.replaceState({}, '', '/admin');
+      setTimeout(() => { setLoginView('login'); setResetMsg(''); setResetToken(''); setResetNewPassword(''); setResetConfirm(''); }, 2500);
+    } catch (error: any) {
+      setResetMsg(error.response?.data?.message || 'Failed to reset password. The link may have expired.');
+    }
+  };
+
   /* ── Login screen ────────────────────────────────────────── */
   if (!token) {
     return (
       <div className="admin-login-wrap">
         <div className="admin-login-card">
-          <h2>Admin Login</h2>
-          <form onSubmit={login}>
-            <div className="form-field">
-              <label htmlFor="admin-email">Email</label>
-              <input id="admin-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="admin@example.com" required />
-            </div>
-            <div className="form-field">
-              <label htmlFor="admin-password">Password</label>
-              <input id="admin-password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Password" required />
-            </div>
-            {loginError && <p className="error-message">{loginError}</p>}
-            <button type="submit">Login</button>
-          </form>
+
+          {loginView === 'login' && (
+            <>
+              <h2>Admin Login</h2>
+              <form onSubmit={login}>
+                <div className="form-field">
+                  <label htmlFor="admin-email">Email</label>
+                  <input id="admin-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="admin@example.com" required />
+                </div>
+                <div className="form-field">
+                  <label htmlFor="admin-password">Password</label>
+                  <input id="admin-password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Password" required />
+                </div>
+                {loginError && <p className="error-message">{loginError}</p>}
+                <button type="submit">Login</button>
+              </form>
+              <button type="button" className="forgot-link" onClick={() => { setLoginView('forgot'); setLoginError(''); }}>
+                Forgot password?
+              </button>
+            </>
+          )}
+
+          {loginView === 'forgot' && (
+            <>
+              <h2>Reset Password</h2>
+              <p className="admin-section-desc">Enter your email address and we'll send you a reset link.</p>
+              <form onSubmit={forgotPassword}>
+                <div className="form-field">
+                  <label htmlFor="forgot-email">Email</label>
+                  <input id="forgot-email" type="email" value={forgotEmail} onChange={(e) => setForgotEmail(e.target.value)} placeholder="admin@example.com" required />
+                </div>
+                {forgotMsg && <p className={forgotMsg.includes('sent') ? 'success-message' : 'error-message'}>{forgotMsg}</p>}
+                <button type="submit">Send Reset Link</button>
+              </form>
+              <button type="button" className="login-back-link" onClick={() => { setLoginView('login'); setForgotMsg(''); setForgotEmail(''); }}>
+                Back to login
+              </button>
+            </>
+          )}
+
+          {loginView === 'reset' && (
+            <>
+              <h2>Set New Password</h2>
+              <form onSubmit={submitPasswordReset}>
+                <div className="form-field">
+                  <label htmlFor="reset-password">New Password</label>
+                  <input id="reset-password" type="password" value={resetNewPassword} onChange={(e) => setResetNewPassword(e.target.value)} minLength={8} placeholder="Minimum 8 characters" required />
+                  <small>Minimum 8 characters</small>
+                </div>
+                <div className="form-field">
+                  <label htmlFor="reset-confirm">Confirm Password</label>
+                  <input id="reset-confirm" type="password" value={resetConfirm} onChange={(e) => setResetConfirm(e.target.value)} required />
+                </div>
+                {resetMsg && <p className={resetMsg.includes('successfully') ? 'success-message' : 'error-message'}>{resetMsg}</p>}
+                <button type="submit">Reset Password</button>
+              </form>
+              <button type="button" className="login-back-link" onClick={() => { setLoginView('login'); window.history.replaceState({}, '', '/admin'); }}>
+                Back to login
+              </button>
+            </>
+          )}
+
         </div>
       </div>
     );
@@ -372,29 +477,69 @@ export function AdminPage() {
       </div>
 
       {/* ── Bookings ── */}
-      <div className="admin-section">
-        <h3>Bookings</h3>
-        <div className="bookings-list">
-          {bookings.length === 0 && <p className="admin-section-desc">No bookings found.</p>}
-          {bookings.map((b) => (
-            <div key={b.id} className="booking-card">
-              <div className="booking-info">
-                <div className="booking-name">{b.residentName} — Unit {b.unit}</div>
-                <div className="booking-meta">{b.moveType?.replace('_', ' ')} · {b.moveDate ? new Date(b.moveDate).toLocaleDateString() : ''}</div>
-              </div>
-              <span className={`booking-status ${b.status}`}>{b.status}</span>
-              <div className="booking-actions">
-                <button className="btn-sm btn-green" onClick={() => updateStatus(b.id, 'APPROVED')} disabled={isUpdating === b.id}>
-                  {isUpdating === b.id ? '…' : 'Approve'}
-                </button>
-                <button className="btn-sm btn-red" onClick={() => updateStatus(b.id, 'REJECTED')} disabled={isUpdating === b.id}>
-                  {isUpdating === b.id ? '…' : 'Reject'}
-                </button>
+      {(() => {
+        const today = new Date(); today.setHours(0, 0, 0, 0);
+        const upcoming = bookings.filter((b) => new Date(b.startDatetime) >= today);
+        const past = bookings.filter((b) => new Date(b.startDatetime) < today)
+          .sort((a, b) => new Date(b.startDatetime).getTime() - new Date(a.startDatetime).getTime());
+
+        const renderBooking = (b: any) => (
+          <div key={b.id} className="booking-card">
+            <div className="booking-info">
+              <div className="booking-name">{b.residentName} — Unit {b.unit}</div>
+              <div className="booking-meta">
+                {b.moveType?.replace(/_/g, ' ')} · {b.startDatetime ? new Date(b.startDatetime).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : ''}
               </div>
             </div>
-          ))}
-        </div>
-      </div>
+            <span className={`booking-status ${b.status}`}>{b.status}</span>
+            <div className="booking-actions">
+              <button className="btn-sm btn-green" onClick={() => updateStatus(b.id, 'APPROVED')} disabled={isUpdating === b.id}>
+                {isUpdating === b.id ? '…' : 'Approve'}
+              </button>
+              <button className="btn-sm btn-red" onClick={() => updateStatus(b.id, 'REJECTED')} disabled={isUpdating === b.id}>
+                {isUpdating === b.id ? '…' : 'Reject'}
+              </button>
+              <button className="btn-sm btn-slate" onClick={() => deleteBooking(b.id, b.residentName)} disabled={isUpdating === b.id}>
+                {isUpdating === b.id ? '…' : 'Delete'}
+              </button>
+            </div>
+          </div>
+        );
+
+        return (
+          <div className="admin-section">
+            <h3>Bookings</h3>
+            <div className="bookings-list">
+              {bookings.length === 0 && <p className="admin-section-desc">No bookings found.</p>}
+
+              {upcoming.length > 0 && (
+                <>
+                  {past.length > 0 && <div className="bookings-section-label">Upcoming</div>}
+                  {upcoming.map(renderBooking)}
+                </>
+              )}
+
+              {upcoming.length === 0 && past.length > 0 && (
+                <p className="admin-section-desc">No upcoming bookings.</p>
+              )}
+
+              {past.length > 0 && (
+                <>
+                  <button type="button" className="bookings-past-toggle" onClick={() => setShowPastBookings((v) => !v)}>
+                    {showPastBookings ? 'Hide' : 'Show'} past bookings ({past.length})
+                  </button>
+                  {showPastBookings && (
+                    <>
+                      <div className="bookings-section-label" style={{ marginTop: '16px' }}>Past</div>
+                      {past.map(renderBooking)}
+                    </>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+        );
+      })()}
 
       {canManageSettings && (
         <>

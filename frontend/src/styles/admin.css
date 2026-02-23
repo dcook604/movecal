@@ -31,12 +31,43 @@
   font-size: 1.5rem;
 }
 
-.admin-login-card button {
+.admin-login-card button[type="submit"] {
   width: 100%;
   min-height: 44px;
   font-size: 1rem;
   margin-top: 8px;
 }
+
+.forgot-link {
+  display: block;
+  width: 100%;
+  margin-top: 12px;
+  background: none;
+  border: none;
+  color: #3b82f6;
+  font-size: 0.875rem;
+  cursor: pointer;
+  text-align: center;
+  padding: 4px 0;
+  text-decoration: underline;
+}
+
+.forgot-link:hover { color: #1d4ed8; }
+
+.login-back-link {
+  display: block;
+  margin-top: 12px;
+  color: #64748b;
+  font-size: 0.875rem;
+  cursor: pointer;
+  text-align: center;
+  background: none;
+  border: none;
+  padding: 4px 0;
+  text-decoration: underline;
+}
+
+.login-back-link:hover { color: #334155; }
 
 /* ── Page title row ──────────────────────────────────────────── */
 .admin-title-row {
@@ -152,11 +183,39 @@
   font-weight: 600;
   text-transform: uppercase;
 }
-.booking-status.PENDING  { background: #fef3c7; color: #92400e; }
-.booking-status.APPROVED { background: #d1fae5; color: #065f46; }
-.booking-status.REJECTED { background: #fee2e2; color: #991b1b; }
+.booking-status.SUBMITTED { background: #dbeafe; color: #1e40af; }
+.booking-status.PENDING   { background: #fef3c7; color: #92400e; }
+.booking-status.APPROVED  { background: #d1fae5; color: #065f46; }
+.booking-status.REJECTED  { background: #fee2e2; color: #991b1b; }
+.booking-status.CANCELLED { background: #f1f5f9; color: #475569; }
 
 .booking-actions { display: flex; gap: 8px; flex-shrink: 0; }
+
+/* ── Bookings section headers ────────────────────────────────── */
+.bookings-section-label {
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #64748b;
+  margin: 16px 0 8px;
+}
+
+.bookings-section-label:first-child { margin-top: 4px; }
+
+.bookings-past-toggle {
+  background: none;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  color: #64748b;
+  font-size: 0.8125rem;
+  cursor: pointer;
+  padding: 5px 12px;
+  margin-top: 12px;
+  display: inline-block;
+}
+
+.bookings-past-toggle:hover { background: #f8fafc; border-color: #cbd5e1; color: #334155; }
 
 /* ── Generic card ────────────────────────────────────────────── */
 .admin-card {

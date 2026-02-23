@@ -44,8 +44,22 @@ model User {
   bookings     Booking[]  @relation("CreatedBookings")
   approvals    Booking[]  @relation("ApprovedBookings")
   auditLogs    AuditLog[]
+  resetTokens  PasswordResetToken[]
 
   @@map("users")
+}
+
+model PasswordResetToken {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  token     String    @unique
+  expiresAt DateTime  @map("expires_at")
+  usedAt    DateTime? @map("used_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("password_reset_tokens")
 }
 
 model Booking {

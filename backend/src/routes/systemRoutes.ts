@@ -2,12 +2,14 @@ import { FastifyInstance } from 'fastify';
 import { BookingStatus, MoveType, UserRole } from '@prisma/client';
 import { z } from 'zod';
 import bcrypt from 'bcryptjs';
+import crypto from 'crypto';
 import { stringify } from 'csv-stringify/sync';
 import { prisma } from '../prisma.js';
 import { config } from '../config.js';
 import { assertNoConflict } from '../services/conflictService.js';
 import { requireAuth, requireRole } from '../middleware/auth.js';
 import { validateMoveTime } from '../utils/moveTimeValidator.js';
+import { sendEmail, emailWrapper } from '../services/emailService.js';
 
 const intakeSchema = z.object({
   residentName: z.string().min(1),
@@ -124,6 +126,71 @@ export async function systemRoutes(app: FastifyInstance) {
       token,
       user: { id: user.id, role: user.role, name: user.name, email: normalizedEmail }
     };
+  });
+
+  // Forgot password — sends a reset link to the user's email
+  app.post('/api/auth/forgot-password', {
+    config: { rateLimit: { max: 3, timeWindow: '15 minutes' } }
+  }, async (req, reply) => {
+    const body = z.object({ email: z.string().email() }).parse(req.body);
+    const normalizedEmail = body.email.trim().toLowerCase();
+
+    // Always return the same message to prevent email enumeration
+    const okMsg = { message: 'If an account exists for that email, a reset link has been sent.' };
+
+    const user = await prisma.user.findUnique({ where: { email: normalizedEmail } });
+    if (!user) return okMsg;
+
+    // Invalidate any existing tokens for this user
+    await prisma.passwordResetToken.deleteMany({ where: { userId: user.id } });
+
+    const token = crypto.randomBytes(32).toString('hex');
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+    await prisma.passwordResetToken.create({ data: { userId: user.id, token, expiresAt } });
+
+    const origin = (req.headers.origin as string | undefined) ?? config.frontendOrigins?.[0] ?? '';
+    const resetLink = `${origin}/admin?reset=${token}`;
+
+    await sendEmail(
+      prisma,
+      user.email,
+      'Password Reset Request — MoveCal',
+      emailWrapper(
+        'Reset Your Password',
+        'You requested a password reset for your MoveCal account. Click the button below to set a new password. This link expires in 1 hour.',
+        `<p style="margin:24px 0">
+          <a href="${resetLink}" style="background:#1a1a2e;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:600;font-size:15px">
+            Reset Password
+          </a>
+        </p>
+        <p style="font-size:12px;color:#888">If you did not request this, you can safely ignore this email. Your password will not change.</p>`
+      )
+    ).catch(() => { /* silently ignore email errors — don't leak user existence */ });
+
+    return okMsg;
+  });
+
+  // Reset password using a valid token
+  app.post('/api/auth/reset-password', async (req, reply) => {
+    const body = z.object({
+      token: z.string().min(1),
+      password: z.string().min(8, 'Password must be at least 8 characters')
+    }).parse(req.body);
+
+    const resetToken = await prisma.passwordResetToken.findUnique({ where: { token: body.token } });
+
+    if (!resetToken || resetToken.usedAt || resetToken.expiresAt < new Date()) {
+      return reply.status(400).send({ message: 'Reset link is invalid or has expired.' });
+    }
+
+    const passwordHash = await bcrypt.hash(body.password, 10);
+
+    await prisma.$transaction([
+      prisma.user.update({ where: { id: resetToken.userId }, data: { passwordHash } }),
+      prisma.passwordResetToken.update({ where: { id: resetToken.id }, data: { usedAt: new Date() } })
+    ]);
+
+    return { message: 'Password reset successfully. You can now log in.' };
   });
 
   app.post('/api/intake/email', async (req, reply) => {

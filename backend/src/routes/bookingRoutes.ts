@@ -287,6 +287,27 @@ export async function bookingRoutes(app: FastifyInstance) {
     return updated;
   });
 
+  app.delete('/api/admin/bookings/:id', { preHandler: [requireRole([UserRole.CONCIERGE, UserRole.COUNCIL, UserRole.PROPERTY_MANAGER])] }, async (req) => {
+    const bookingId = uuidSchema.parse((req.params as { id: string }).id);
+    const user = req.user;
+    const existing = await prisma.booking.findUniqueOrThrow({ where: { id: bookingId } });
+
+    // Nullify audit log FK references then delete booking (documents cascade automatically)
+    await prisma.$transaction([
+      prisma.auditLog.updateMany({ where: { bookingId }, data: { bookingId: null } }),
+      prisma.booking.delete({ where: { id: bookingId } })
+    ]);
+
+    await logAudit(prisma, user.id, 'BOOKING_DELETED', undefined, {
+      residentName: existing.residentName,
+      unit: existing.unit,
+      moveType: existing.moveType,
+      status: existing.status
+    });
+
+    return { message: 'Booking deleted successfully' };
+  });
+
   app.post('/api/admin/bookings/:id/documents', { preHandler: [requireRole([UserRole.CONCIERGE, UserRole.COUNCIL, UserRole.PROPERTY_MANAGER])] }, async (req) => {
     const data = await req.file();
     if (!data) throw new Error('No file');
