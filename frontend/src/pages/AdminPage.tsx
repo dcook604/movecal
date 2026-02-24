@@ -153,6 +153,19 @@ export function AdminPage() {
 
   const canManageSettings = role === 'COUNCIL' || role === 'PROPERTY_MANAGER';
 
+  const handleAuthError = (error: unknown): boolean => {
+    if (axios.isAxiosError(error) && error.response?.status === 401) {
+      updateToken('');
+      setRole(null);
+      setToken();
+      localStorage.removeItem('movecal_token');
+      localStorage.removeItem('movecal_role');
+      setLoginError('Your session has expired. Please log in again.');
+      return true;
+    }
+    return false;
+  };
+
   const refresh = async () => {
     setLoadError('');
     try {
@@ -170,11 +183,12 @@ export function AdminPage() {
         setUsers(u.data);
       }
     } catch (error) {
+      if (handleAuthError(error)) return;
       if (axios.isAxiosError(error) && error.response?.status === 403) {
-        setLoadError('You do not have permission for one or more admin actions.');
+        setLoadError('You do not have permission to access admin data.');
         return;
       }
-      setLoadError('Failed to load admin data.');
+      setLoadError('Failed to load admin data. Please refresh the page.');
     }
   };
 
@@ -216,7 +230,9 @@ export function AdminPage() {
       setActionMessage(`Booking ${label} successfully`);
       await refresh();
     } catch (error: any) {
-      setActionMessage(error.response?.data?.message || `Failed to ${status.toLowerCase()} booking.`);
+      if (handleAuthError(error)) return;
+      const verb = status === 'APPROVED' ? 'approve' : status === 'REJECTED' ? 'reject' : status.toLowerCase();
+      setActionMessage(error.response?.data?.message || `Failed to ${verb} booking.`);
     } finally { setIsUpdating(null); }
   };
 
@@ -229,6 +245,7 @@ export function AdminPage() {
       setActionMessage('Booking deleted successfully');
       await refresh();
     } catch (error: any) {
+      if (handleAuthError(error)) return;
       setActionMessage(error.response?.data?.message || 'Failed to delete booking.');
     } finally { setIsUpdating(null); }
   };
@@ -242,6 +259,7 @@ export function AdminPage() {
       setActionMessage('Recipient added successfully');
       await refresh();
     } catch (error: any) {
+      if (handleAuthError(error)) return;
       setActionMessage(error.response?.data?.message || 'Failed to add recipient.');
     }
   };
@@ -253,6 +271,7 @@ export function AdminPage() {
       setActionMessage(`Recipient ${enabled ? 'enabled' : 'disabled'} successfully`);
       await refresh();
     } catch (error: any) {
+      if (handleAuthError(error)) return;
       setActionMessage(error.response?.data?.message || 'Failed to update recipient.');
     }
   };
@@ -265,6 +284,7 @@ export function AdminPage() {
       setActionMessage('Recipient deleted successfully');
       await refresh();
     } catch (error: any) {
+      if (handleAuthError(error)) return;
       setActionMessage(error.response?.data?.message || 'Failed to delete recipient.');
     }
   };
@@ -284,6 +304,7 @@ export function AdminPage() {
       setActionMessage('Settings saved successfully');
       await refresh();
     } catch (error: any) {
+      if (handleAuthError(error)) return;
       setActionMessage(error.response?.data?.message || 'Failed to save settings.');
     }
   };
@@ -294,6 +315,7 @@ export function AdminPage() {
       await api.post('/api/admin/settings/test-email', { to: email });
       setActionMessage('Test email sent successfully');
     } catch (error: any) {
+      if (handleAuthError(error)) return;
       setActionMessage(error.response?.data?.message || 'Failed to send test email.');
     }
   };
@@ -308,7 +330,8 @@ export function AdminPage() {
       setAccountMessage('Password changed successfully');
       setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
     } catch (error: any) {
-      setAccountMessage(error.response?.data?.message || 'Failed to change password');
+      if (handleAuthError(error)) return;
+      setAccountMessage(error.response?.data?.message || 'Failed to change password.');
     }
   };
 
@@ -326,7 +349,8 @@ export function AdminPage() {
       setAccountMessage('Email changed successfully');
       setEmailForm({ newEmail: '', password: '' });
     } catch (error: any) {
-      setAccountMessage(error.response?.data?.message || 'Failed to change email');
+      if (handleAuthError(error)) return;
+      setAccountMessage(error.response?.data?.message || 'Failed to change email.');
     }
   };
 
@@ -339,7 +363,8 @@ export function AdminPage() {
       setUserForm({ name: '', email: '', password: '', role: 'CONCIERGE' });
       await refresh();
     } catch (error: any) {
-      setUserMessage(error.response?.data?.message || 'Failed to create user');
+      if (handleAuthError(error)) return;
+      setUserMessage(error.response?.data?.message || 'Failed to create user.');
     }
   };
 
@@ -354,7 +379,8 @@ export function AdminPage() {
       setUserForm({ name: '', email: '', password: '', role: 'CONCIERGE' });
       await refresh();
     } catch (error: any) {
-      setUserMessage(error.response?.data?.message || 'Failed to update user');
+      if (handleAuthError(error)) return;
+      setUserMessage(error.response?.data?.message || 'Failed to update user.');
     }
   };
 
@@ -366,7 +392,8 @@ export function AdminPage() {
       setUserMessage('User deleted successfully');
       await refresh();
     } catch (error: any) {
-      setUserMessage(error.response?.data?.message || 'Failed to delete user');
+      if (handleAuthError(error)) return;
+      setUserMessage(error.response?.data?.message || 'Failed to delete user.');
     }
   };
 
@@ -425,6 +452,7 @@ export function AdminPage() {
       await refresh();
       setActionMessage('Booking created and approved successfully');
     } catch (error: any) {
+      if (handleAuthError(error)) return;
       setQuickError(error.response?.data?.message || 'Failed to create booking.');
     } finally {
       setIsQuickSubmitting(false);
