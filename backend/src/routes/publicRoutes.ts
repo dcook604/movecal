@@ -27,6 +27,6 @@ export async function publicRoutes(app: FastifyInstance) {
       orderBy: { startDatetime: 'asc' },
       select: { id: true, moveType: true, startDatetime: true, endDatetime: true, moveDate: true, unit: true, publicUnitMask: true }
     });
-    return bookings.map((b) => ({ ...b, unit: b.publicUnitMask ?? b.unit }));
+    return bookings.map((b) => ({ ...b, unit: b.publicUnitMask || b.unit }));
   });
 }
