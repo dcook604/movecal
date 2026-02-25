@@ -1,4 +1,4 @@
-import { FormEvent, useState } from 'react';
+import { FormEvent, useEffect, useState } from 'react';
 import dayjs from 'dayjs';
 import { api } from '../api';
 import '../styles/resident.css';
@@ -72,6 +72,18 @@ function generateTimeSlots(rangeStartMins: number, rangeEndMins: number, blockMi
   return slots;
 }
 
+function timeToMins(hhmm: string): number {
+  const [h, m] = hhmm.split(':').map(Number);
+  return h * 60 + m;
+}
+
+function filterAvailableSlots(slots: Slot[], takenRanges: { start: string; end: string }[]): Slot[] {
+  return slots.filter(slot => {
+    const sS = timeToMins(slot.start), sE = timeToMins(slot.end);
+    return !takenRanges.some(r => sS < timeToMins(r.end) && sE > timeToMins(r.start));
+  });
+}
+
 function getSlotsForDateAndType(dateStr: string, moveType: string): Slot[] | null {
   if (!dateStr) return null;
   if (STATUTORY_HOLIDAYS.has(dateStr)) return []; // holiday — no slots
@@ -99,9 +111,18 @@ export function ResidentSubmissionPage() {
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [takenRanges, setTakenRanges] = useState<{ start: string; end: string }[]>([]);
 
-  const availableSlots = getSlotsForDateAndType(form.moveDate ?? '', form.moveType ?? 'MOVE_IN');
-  const isHoliday = form.moveDate && availableSlots !== null && availableSlots.length === 0;
+  useEffect(() => {
+    if (!form.moveDate) { setTakenRanges([]); return; }
+    api.get(`/api/public/taken-slots?date=${form.moveDate}`)
+      .then(res => setTakenRanges(res.data))
+      .catch(() => setTakenRanges([]));
+  }, [form.moveDate]);
+
+  const rawSlots = getSlotsForDateAndType(form.moveDate ?? '', form.moveType ?? 'MOVE_IN');
+  const isHoliday = form.moveDate && rawSlots !== null && rawSlots.length === 0;
+  const availableSlots = rawSlots ? filterAvailableSlots(rawSlots, takenRanges) : rawSlots;
 
   const handleDateChange = (dateStr: string) => {
     setForm({ ...form, moveDate: dateStr });

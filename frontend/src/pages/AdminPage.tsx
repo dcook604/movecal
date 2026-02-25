@@ -81,6 +81,18 @@ function getSlotsForDateAndType(dateStr: string, moveType: string): Slot[] | nul
   return isWeekend ? MOVE_WEEKEND_SLOTS : MOVE_WEEKDAY_SLOTS;
 }
 
+function timeToMins(hhmm: string): number {
+  const [h, m] = hhmm.split(':').map(Number);
+  return h * 60 + m;
+}
+
+function filterAvailableSlots(slots: Slot[], takenRanges: { start: string; end: string }[]): Slot[] {
+  return slots.filter(slot => {
+    const sS = timeToMins(slot.start), sE = timeToMins(slot.end);
+    return !takenRanges.some(r => sS < timeToMins(r.end) && sE > timeToMins(r.start));
+  });
+}
+
 const emptyRecipient = { name: '', email: '', enabled: true, notifyOn: ['APPROVED', 'REJECTED', 'SUBMITTED'] };
 type UserRole = 'CONCIERGE' | 'COUNCIL' | 'PROPERTY_MANAGER';
 
@@ -150,6 +162,7 @@ export function AdminPage() {
   const [quickSlot, setQuickSlot] = useState('');
   const [quickError, setQuickError] = useState('');
   const [isQuickSubmitting, setIsQuickSubmitting] = useState(false);
+  const [quickTakenRanges, setQuickTakenRanges] = useState<{ start: string; end: string }[]>([]);
 
   const canManageSettings = role === 'COUNCIL' || role === 'PROPERTY_MANAGER';
 
@@ -219,6 +232,13 @@ export function AdminPage() {
     const tok = params.get('reset');
     if (tok) { setResetToken(tok); setLoginView('reset'); }
   }, []);
+
+  useEffect(() => {
+    if (!quickForm.moveDate) { setQuickTakenRanges([]); return; }
+    api.get(`/api/public/taken-slots?date=${quickForm.moveDate}`)
+      .then((res: any) => setQuickTakenRanges(res.data))
+      .catch(() => setQuickTakenRanges([]));
+  }, [quickForm.moveDate]);
 
   const updateStatus = async (id: string, status: string) => {
     if (!confirm(`Are you sure you want to ${status.toLowerCase()} this booking?`)) return;
@@ -623,8 +643,9 @@ export function AdminPage() {
         const past = bookings.filter((b) => new Date(b.startDatetime) < today)
           .sort((a, b) => new Date(b.startDatetime).getTime() - new Date(a.startDatetime).getTime());
 
-        const qSlots = getSlotsForDateAndType(quickForm.moveDate, quickForm.moveType);
-        const qIsHoliday = quickForm.moveDate && qSlots !== null && qSlots.length === 0;
+        const qRawSlots = getSlotsForDateAndType(quickForm.moveDate, quickForm.moveType);
+        const qIsHoliday = quickForm.moveDate && qRawSlots !== null && qRawSlots.length === 0;
+        const qSlots = qRawSlots ? filterAvailableSlots(qRawSlots, quickTakenRanges) : qRawSlots;
 
         const renderBooking = (b: any) => (
           <div key={b.id} className="booking-card">
@@ -665,22 +686,22 @@ export function AdminPage() {
                 <form onSubmit={submitQuickEntry}>
                   <div className="quick-entry-form-grid">
                     <div className="form-field">
-                      <label htmlFor="qe-name" className="required">Resident Name</label>
+                      <label htmlFor="qe-name">Resident Name</label>
                       <input id="qe-name" value={quickForm.residentName}
                         onChange={(e) => setQuickForm({ ...quickForm, residentName: e.target.value })}
-                        placeholder="e.g. Jane Smith" required />
+                        placeholder="e.g. Jane Smith" />
                     </div>
                     <div className="form-field">
-                      <label htmlFor="qe-email" className="required">Resident Email</label>
+                      <label htmlFor="qe-email">Resident Email</label>
                       <input id="qe-email" type="email" value={quickForm.residentEmail}
                         onChange={(e) => setQuickForm({ ...quickForm, residentEmail: e.target.value })}
-                        placeholder="name@example.com" required />
+                        placeholder="name@example.com" />
                     </div>
                     <div className="form-field">
-                      <label htmlFor="qe-phone" className="required">Resident Phone</label>
+                      <label htmlFor="qe-phone">Resident Phone</label>
                       <input id="qe-phone" value={quickForm.residentPhone}
                         onChange={(e) => setQuickForm({ ...quickForm, residentPhone: e.target.value })}
-                        placeholder="e.g. 604-555-1234" required />
+                        placeholder="e.g. 604-555-1234" />
                     </div>
                     <div className="form-field">
                       <label htmlFor="qe-unit" className="required">Unit</label>

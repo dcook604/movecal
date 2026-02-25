@@ -29,6 +29,13 @@ const createSchema = z.object({
   publicUnitMask: z.string().max(20).optional()
 });
 
+// Quick-entry schema: name/email/phone are optional (admin knows who they're booking for)
+const quickEntrySchema = createSchema.extend({
+  residentName:  z.string().max(200).optional().default(''),
+  residentEmail: z.string().max(320).optional().default(''),
+  residentPhone: z.string().max(50).optional().default(''),
+});
+
 // UUID validation schema for ID parameters
 const uuidSchema = z.string().uuid();
 
@@ -105,7 +112,7 @@ export async function bookingRoutes(app: FastifyInstance) {
   });
 
   app.post('/api/admin/quick-entry/approve', { preHandler: [requireRole([UserRole.CONCIERGE, UserRole.COUNCIL, UserRole.PROPERTY_MANAGER])] }, async (req, reply) => {
-    const body = createSchema.parse(req.body);
+    const body = quickEntrySchema.parse(req.body);
 
     // Validate move time restrictions (admins can override with proper role)
     const user = req.user;
