@@ -299,10 +299,10 @@ export function ResidentSubmissionPage() {
                 id="time-slot"
                 value={slot}
                 onChange={(e) => setSlot(e.target.value)}
-                disabled={!form.moveDate || isHoliday}
+                disabled={!form.moveDate || isHoliday || availableSlots?.length === 0}
               >
                 <option value="">
-                  {!form.moveDate ? 'Select a date first' : 'Select a time slot'}
+                  {!form.moveDate ? 'Select a date first' : availableSlots?.length === 0 ? 'No slots available' : 'Select a time slot'}
                 </option>
                 {(availableSlots ?? []).map((s) => (
                   <option key={s.start} value={s.start}>{s.label}</option>

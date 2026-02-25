@@ -729,10 +729,10 @@ export function AdminPage() {
                       <label htmlFor="qe-slot" className="required">Time Slot</label>
                       <select id="qe-slot" value={quickSlot}
                         onChange={(e) => setQuickSlot(e.target.value)}
-                        disabled={!quickForm.moveDate || !!qIsHoliday}
+                        disabled={!quickForm.moveDate || !!qIsHoliday || qSlots?.length === 0}
                         required>
                         <option value="">
-                          {!quickForm.moveDate ? 'Select a date first' : qIsHoliday ? 'No slots on holidays' : 'Select a time slot'}
+                          {!quickForm.moveDate ? 'Select a date first' : qIsHoliday ? 'No slots on holidays' : qSlots?.length === 0 ? 'No slots available' : 'Select a time slot'}
                         </option>
                         {(qSlots ?? []).map((s) => (
                           <option key={s.start} value={s.start}>{s.label}</option>
