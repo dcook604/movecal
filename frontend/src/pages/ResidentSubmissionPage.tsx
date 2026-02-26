@@ -108,6 +108,7 @@ export function ResidentSubmissionPage() {
   const [form, setForm] = useState<any>({ moveType: 'MOVE_IN', elevatorRequired: true, loadingBayRequired: false });
   const [slot, setSlot] = useState('');
   const [accepted, setAccepted] = useState(false);
+  const [acceptedFees, setAcceptedFees] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -162,6 +163,11 @@ export function ResidentSubmissionPage() {
       setMessage('');
       return;
     }
+    if (!acceptedFees) {
+      setError('You must acknowledge the move-in fee/deposit requirement before submitting');
+      setMessage('');
+      return;
+    }
 
     // Build startDatetime / endDatetime from date + slot
     const selected = availableSlots?.find((s) => s.start === slot);
@@ -181,6 +187,7 @@ export function ResidentSubmissionPage() {
       setForm({ moveType: 'MOVE_IN', elevatorRequired: true, loadingBayRequired: false });
       setSlot('');
       setAccepted(false);
+      setAcceptedFees(false);
     } catch (err: any) {
       setError(err.response?.data?.message || 'Failed to submit request. Please try again.');
     } finally {
@@ -343,9 +350,19 @@ export function ResidentSubmissionPage() {
                 the move.
               </span>
             </label>
+            <label className="bylaws-label bylaws-label--warning">
+              <input type="checkbox" checked={acceptedFees}
+                onChange={(e) => setAcceptedFees(e.target.checked)} />
+              <span>
+                I acknowledge that my request will be declined if the move-in fees/deposits
+                have not been paid. If you do not make payment to the Concierge within
+                24 hours, it will be declined and your move will not be processed, forgoing
+                the timeslot requested.
+              </span>
+            </label>
           </div>
 
-          <button className="btn-full" disabled={isSubmitting || !accepted} type="submit">
+          <button className="btn-full" disabled={isSubmitting || !accepted || !acceptedFees} type="submit">
             {isSubmitting ? 'Submitting…' : 'Submit Booking Request'}
           </button>
 

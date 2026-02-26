@@ -121,6 +121,15 @@
   accent-color: #0ea5e9;
 }
 
+.bylaws-label + .bylaws-label {
+  margin-top: 12px;
+}
+
+.bylaws-label--warning {
+  color: #b91c1c;
+  font-weight: 600;
+}
+
 /* Submit button */
 .resident-form-card .btn-full {
   width: 100%;
