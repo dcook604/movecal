@@ -14,7 +14,8 @@ const envSchema = z.object({
   DATABASE_URL: z.string().optional(),
   INVOICE_NINJA_URL: z.string().optional(),
   INVOICE_NINJA_API_TOKEN: z.string().optional(),
-  ANTHROPIC_API_KEY: z.string().optional()
+  ANTHROPIC_API_KEY: z.string().optional(),
+  DEEPSEEK_API_KEY: z.string().optional()
 });
 
 const env = envSchema.parse(process.env);
@@ -72,5 +73,6 @@ export const config = {
   frontendOrigins,
   invoiceNinjaUrl: env.INVOICE_NINJA_URL,
   invoiceNinjaApiToken: env.INVOICE_NINJA_API_TOKEN,
-  anthropicApiKey: env.ANTHROPIC_API_KEY
+  anthropicApiKey: env.ANTHROPIC_API_KEY,
+  deepseekApiKey: env.DEEPSEEK_API_KEY
 };

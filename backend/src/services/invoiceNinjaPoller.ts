@@ -21,6 +21,32 @@ function classifyFeeType(productKey: string, notes: string): 'move_in' | 'move_o
   return null;
 }
 
+async function classifyWithDeepSeek(productKey: string, notes: string): Promise<'move_in' | 'move_out' | null> {
+  if (!config.deepseekApiKey) return null;
+  try {
+    const response = await fetch('https://api.deepseek.com/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${config.deepseekApiKey}`,
+      },
+      body: JSON.stringify({
+        model: 'deepseek-chat',
+        max_tokens: 10,
+        messages: [{
+          role: 'user',
+          content: `Given this invoice line item:\nItem: "${productKey}"\nDescription: "${notes}"\nIs this a move-in fee or a move-out fee? Reply with only "move_in" or "move_out".`,
+        }],
+      }),
+    });
+    if (!response.ok) return null;
+    const json = await response.json() as { choices?: { message?: { content?: string } }[] };
+    const text = json.choices?.[0]?.message?.content?.trim().toLowerCase() ?? '';
+    if (text === 'move_in' || text === 'move_out') return text as 'move_in' | 'move_out';
+  } catch { /* fall through */ }
+  return null;
+}
+
 async function classifyWithClaude(productKey: string, notes: string): Promise<'move_in' | 'move_out' | null> {
   if (!config.anthropicApiKey) return null;
   try {
@@ -121,7 +147,9 @@ async function processInvoice(invoice: InvoiceNinjaInvoice, log: { error: (obj: 
 
   let feeType: string = classifyFeeType(productKey, notes) ?? 'unknown';
   if (feeType === 'unknown') {
-    feeType = (await classifyWithClaude(productKey, notes)) ?? 'unknown';
+    feeType = (await classifyWithDeepSeek(productKey, notes))
+           ?? (await classifyWithClaude(productKey, notes))
+           ?? 'unknown';
   }
 
   await prisma.paymentsLedger.create({
