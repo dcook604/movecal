@@ -152,3 +152,29 @@ model AuditLog {
 
   @@map("audit_log")
 }
+
+model PaymentsLedger {
+  id            String         @id @default(uuid()) @db.Uuid
+  clientId      String         @map("client_id")
+  invoiceId     String         @unique @map("invoice_id")
+  billingPeriod String         @map("billing_period")
+  feeType       String         @map("fee_type")
+  unit          String?
+  paidAt        DateTime       @map("paid_at")
+  createdAt     DateTime       @default(now()) @map("created_at")
+  moveApprovals MoveApproval[]
+
+  @@map("payments_ledger")
+}
+
+model MoveApproval {
+  id            String         @id @default(uuid()) @db.Uuid
+  moveRequestId String         @map("move_request_id")
+  clientId      String         @map("client_id")
+  invoiceId     String         @map("invoice_id")
+  billingPeriod String         @map("billing_period")
+  approvedAt    DateTime       @default(now()) @map("approved_at")
+  payment       PaymentsLedger @relation(fields: [invoiceId], references: [invoiceId])
+
+  @@map("move_approvals")
+}

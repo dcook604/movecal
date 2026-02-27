@@ -11,7 +11,9 @@ const envSchema = z.object({
   INTAKE_SHARED_SECRET: z.string().optional(),
   UPLOADS_DIR: z.string().optional(),
   FRONTEND_URL: z.string().optional(),
-  DATABASE_URL: z.string().optional()
+  DATABASE_URL: z.string().optional(),
+  INVOICE_NINJA_WEBHOOK_SECRET: z.string().optional(),
+  ANTHROPIC_API_KEY: z.string().optional()
 });
 
 const env = envSchema.parse(process.env);
@@ -66,5 +68,7 @@ export const config = {
   encryptionKey: env.SETTINGS_ENCRYPTION_KEY ?? '0123456789abcdef0123456789abcdef',
   intakeSecret: env.INTAKE_SHARED_SECRET ?? 'dev-intake-secret',
   uploadsDir: env.UPLOADS_DIR ?? 'uploads',
-  frontendOrigins
+  frontendOrigins,
+  invoiceNinjaWebhookSecret: env.INVOICE_NINJA_WEBHOOK_SECRET,
+  anthropicApiKey: env.ANTHROPIC_API_KEY
 };

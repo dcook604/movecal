@@ -14,6 +14,7 @@ import { publicRoutes } from './routes/publicRoutes.js';
 import { bookingRoutes } from './routes/bookingRoutes.js';
 import { adminRoutes } from './routes/adminRoutes.js';
 import { systemRoutes } from './routes/systemRoutes.js';
+import { webhookRoutes } from './routes/webhookRoutes.js';
 import { prisma } from './prisma.js';
 import { startAutoApprovalJob } from './services/autoApprovalService.js';
 import { ZodError } from 'zod';
@@ -97,6 +98,7 @@ await app.register(publicRoutes);
 await app.register(bookingRoutes);
 await app.register(adminRoutes);
 await app.register(systemRoutes);
+await app.register(webhookRoutes);
 
 startAutoApprovalJob();
 

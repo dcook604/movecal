@@ -12,6 +12,7 @@ import { sendEmail, sendNotificationRecipients, bookingDetailsHtml, emailWrapper
 import { logAudit } from '../services/auditService.js';
 import { config } from '../config.js';
 import { validateMoveTime } from '../utils/moveTimeValidator.js';
+import { checkAndApproveMoveRequest } from '../services/moveApprovalService.js';
 
 const createSchema = z.object({
   residentName: z.string().min(1).max(200),
@@ -78,6 +79,20 @@ export async function bookingRoutes(app: FastifyInstance) {
         }
       });
     });
+
+    // Check if payment already exists for this booking (payment-first flow)
+    if (booking.moveType === MoveType.MOVE_IN || booking.moveType === MoveType.MOVE_OUT) {
+      const billingPeriod = dayjs(booking.moveDate).format('YYYY-MM');
+      const feeType = booking.moveType === MoveType.MOVE_IN ? 'move_in' : 'move_out';
+      await checkAndApproveMoveRequest({
+        unit: booking.unit,
+        feeType,
+        billingPeriod,
+        bookingId: booking.id,
+      }).catch((err) => {
+        app.log.error({ err, bookingId: booking.id }, 'Invoice approval check failed');
+      });
+    }
 
     const moveTypeLabel = { MOVE_IN: 'Move In', MOVE_OUT: 'Move Out', DELIVERY: 'Delivery', RENO: 'Renovation' }[booking.moveType] ?? booking.moveType;
     const submittedSubject = `Booking Request Received — ${moveTypeLabel} on ${dayjs(booking.startDatetime).format('MMM D, YYYY')}`;

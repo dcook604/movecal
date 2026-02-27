@@ -7,6 +7,7 @@ import { requireRole } from '../middleware/auth.js';
 import { encrypt } from '../utils/crypto.js';
 import { sendEmail } from '../services/emailService.js';
 import { logAudit } from '../services/auditService.js';
+import { checkAndApproveMoveRequest } from '../services/moveApprovalService.js';
 
 export async function adminRoutes(app: FastifyInstance) {
   app.get('/api/admin/stats', { preHandler: [requireRole([UserRole.CONCIERGE, UserRole.COUNCIL, UserRole.PROPERTY_MANAGER])] }, async () => {
@@ -198,6 +199,62 @@ export async function adminRoutes(app: FastifyInstance) {
     });
 
     return user;
+  });
+
+  // Payments Ledger
+  app.get('/api/admin/payments-ledger', { preHandler: [requireRole([UserRole.COUNCIL, UserRole.PROPERTY_MANAGER])] }, async () => {
+    const [matched, unmatched] = await Promise.all([
+      prisma.paymentsLedger.findMany({
+        where: { moveApprovals: { some: {} } },
+        include: { moveApprovals: true },
+        orderBy: { paidAt: 'desc' },
+      }),
+      prisma.paymentsLedger.findMany({
+        where: { moveApprovals: { none: {} } },
+        orderBy: { paidAt: 'desc' },
+      }),
+    ]);
+    return { unmatched, matched };
+  });
+
+  app.patch('/api/admin/payments-ledger/:id/fee-type', { preHandler: [requireRole([UserRole.COUNCIL, UserRole.PROPERTY_MANAGER])] }, async (req, reply) => {
+    const id = z.string().uuid().parse((req.params as { id: string }).id);
+    const { feeType } = z.object({ feeType: z.enum(['move_in', 'move_out']) }).parse(req.body);
+
+    const payment = await prisma.paymentsLedger.findUnique({ where: { id } });
+    if (!payment) return reply.status(404).send({ message: 'Payment not found' });
+
+    const updated = await prisma.paymentsLedger.update({ where: { id }, data: { feeType } });
+
+    let approvalResult: { approved: boolean; invoiceId?: string } = { approved: false };
+
+    if (updated.unit) {
+      const { BookingStatus, MoveType } = await import('@prisma/client');
+      const moveTypeFilter = feeType === 'move_in' ? MoveType.MOVE_IN : MoveType.MOVE_OUT;
+      const [yearStr, monthStr] = updated.billingPeriod.split('-');
+      const monthStart = new Date(Number(yearStr), Number(monthStr) - 1, 1);
+      const monthEnd = new Date(Number(yearStr), Number(monthStr), 1);
+
+      const matchingBooking = await prisma.booking.findFirst({
+        where: {
+          unit: updated.unit,
+          moveType: moveTypeFilter,
+          moveDate: { gte: monthStart, lt: monthEnd },
+          status: { in: [BookingStatus.SUBMITTED, BookingStatus.PENDING] },
+        },
+      });
+
+      if (matchingBooking) {
+        approvalResult = await checkAndApproveMoveRequest({
+          unit: updated.unit,
+          feeType,
+          billingPeriod: updated.billingPeriod,
+          bookingId: matchingBooking.id,
+        });
+      }
+    }
+
+    return { payment: updated, approved: approvalResult.approved };
   });
 
   // Delete user

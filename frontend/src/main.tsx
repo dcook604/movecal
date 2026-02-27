@@ -5,6 +5,7 @@ import { PublicCalendarPage } from './pages/PublicCalendarPage';
 import { ResidentSubmissionPage } from './pages/ResidentSubmissionPage';
 import { AdminPage } from './pages/AdminPage';
 import { LobbyTVPage } from './pages/LobbyTVPage';
+import { PaymentsLedgerPage } from './pages/PaymentsLedgerPage';
 import './styles.css';
 
 function Nav() {
@@ -16,6 +17,7 @@ function Nav() {
       <NavLink to="/">Public Calendar</NavLink>
       <NavLink to="/submit">Resident Submit</NavLink>
       <NavLink to="/admin">Admin</NavLink>
+      <NavLink to="/admin/payments">Payments</NavLink>
       <NavLink to="/tv">Lobby TV</NavLink>
     </nav>
   );
@@ -26,10 +28,11 @@ function App() {
     <BrowserRouter>
       <Nav />
       <Routes>
-        <Route path="/"       element={<PublicCalendarPage />} />
-        <Route path="/submit" element={<ResidentSubmissionPage />} />
-        <Route path="/admin"  element={<AdminPage />} />
-        <Route path="/tv"     element={<LobbyTVPage />} />
+        <Route path="/"                element={<PublicCalendarPage />} />
+        <Route path="/submit"          element={<ResidentSubmissionPage />} />
+        <Route path="/admin"           element={<AdminPage />} />
+        <Route path="/admin/payments"  element={<PaymentsLedgerPage />} />
+        <Route path="/tv"              element={<LobbyTVPage />} />
       </Routes>
     </BrowserRouter>
   );
