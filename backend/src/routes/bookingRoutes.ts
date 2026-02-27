@@ -218,8 +218,11 @@ export async function bookingRoutes(app: FastifyInstance) {
     async () => {
       const bookings = await prisma.booking.findMany({ include: { documents: true }, orderBy: { startDatetime: 'asc' } });
       const approvals = await prisma.moveApproval.findMany({ where: { moveRequestId: { in: bookings.map(b => b.id) } } });
-      const matchedIds = new Set(approvals.map(a => a.moveRequestId));
-      return bookings.map(b => ({ ...b, paymentMatched: matchedIds.has(b.id) }));
+      const approvalByBooking = new Map(approvals.map(a => [a.moveRequestId, a]));
+      return bookings.map(b => {
+        const approval = approvalByBooking.get(b.id);
+        return { ...b, paymentMatched: !!approval, paymentInvoiceId: approval?.invoiceId ?? null };
+      });
     }
   );
 

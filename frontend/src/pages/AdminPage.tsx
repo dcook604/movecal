@@ -666,7 +666,9 @@ export function AdminPage() {
                 {b.moveType?.replace(/_/g, ' ')} · {b.startDatetime ? new Date(b.startDatetime).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : ''}
               </div>
               {b.paymentMatched && (
-                <div className="payment-matched-badge">Payment Confirmed</div>
+                <div className="payment-matched-badge">
+                  Payment Confirmed{b.paymentInvoiceId ? ` · ${b.paymentInvoiceId}` : ''}
+                </div>
               )}
             </div>
             <span className={`booking-status ${b.status}`}>{b.status}</span>
