@@ -47,6 +47,7 @@ export function PaymentsLedgerPage() {
   const [password, setPassword] = useState('');
   const [loginError, setLoginError] = useState('');
 
+  const [selectedMonth, setSelectedMonth] = useState(() => dayjs().format('YYYY-MM'));
   const [unmatched, setUnmatched] = useState<Payment[]>([]);
   const [matched, setMatched] = useState<Payment[]>([]);
   const [loadError, setLoadError] = useState('');
@@ -71,12 +72,12 @@ export function PaymentsLedgerPage() {
     return false;
   };
 
-  const refresh = async () => {
+  const refresh = async (month = selectedMonth) => {
     setLoadError('');
     try {
       // Auto-retry matching on every refresh so unmatched payments resolve without manual action
       await api.post('/api/admin/payments-ledger/retry-match').catch(() => {});
-      const { data } = await api.get('/api/admin/payments-ledger');
+      const { data } = await api.get(`/api/admin/payments-ledger?month=${month}`);
       setUnmatched(data.unmatched ?? []);
       setMatched(data.matched ?? []);
     } catch (error) {
@@ -117,6 +118,7 @@ export function PaymentsLedgerPage() {
   };
 
   useEffect(() => { if (!token) return; refresh(); }, [token]);
+  useEffect(() => { if (!token) return; refresh(selectedMonth); }, [selectedMonth]);
 
   const retryMatch = async () => {
     setActionMessage('');
@@ -184,7 +186,7 @@ export function PaymentsLedgerPage() {
       <h1>Payments Ledger</h1>
 
       <div className="page-actions">
-        <button onClick={refresh}>Refresh</button>
+        <button onClick={() => refresh()}>Refresh</button>
         <button onClick={retryMatch}>Retry Match</button>
         {actionMessage && <span style={{ color: actionMessage.includes('failed') || actionMessage.includes('Failed') ? '#dc2626' : '#166534' }}>{actionMessage}</span>}
       </div>
@@ -250,6 +252,19 @@ export function PaymentsLedgerPage() {
           </table>
         )
       }
+
+      <div className="month-nav">
+        <button
+          className="month-nav-btn"
+          onClick={() => setSelectedMonth(m => dayjs(m + '-01').subtract(1, 'month').format('YYYY-MM'))}
+        >‹</button>
+        <span className="month-nav-label">{dayjs(selectedMonth + '-01').format('MMMM YYYY')}</span>
+        <button
+          className="month-nav-btn"
+          onClick={() => setSelectedMonth(m => dayjs(m + '-01').add(1, 'month').format('YYYY-MM'))}
+          disabled={selectedMonth >= dayjs().format('YYYY-MM')}
+        >›</button>
+      </div>
 
       <h2>Matched Payments</h2>
       {matched.length === 0

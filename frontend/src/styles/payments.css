@@ -24,6 +24,42 @@
   margin-bottom: 24px;
 }
 
+.month-nav {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 8px 0 4px;
+}
+
+.month-nav-label {
+  font-size: 1rem;
+  font-weight: 600;
+  min-width: 140px;
+  text-align: center;
+  color: #1e293b;
+}
+
+.month-nav-btn {
+  background: none;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  padding: 4px 12px;
+  font-size: 1.1rem;
+  cursor: pointer;
+  color: #475569;
+  line-height: 1;
+}
+
+.month-nav-btn:hover:not(:disabled) {
+  background: #f1f5f9;
+  border-color: #94a3b8;
+}
+
+.month-nav-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
 .payments-table {
   width: 100%;
   border-collapse: collapse;

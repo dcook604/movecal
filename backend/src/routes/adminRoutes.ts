@@ -255,10 +255,18 @@ export async function adminRoutes(app: FastifyInstance) {
   });
 
   // Payments Ledger
-  app.get('/api/admin/payments-ledger', { preHandler: [requireRole([UserRole.COUNCIL, UserRole.PROPERTY_MANAGER])] }, async () => {
+  app.get('/api/admin/payments-ledger', { preHandler: [requireRole([UserRole.COUNCIL, UserRole.PROPERTY_MANAGER])] }, async (req) => {
+    const { month } = z.object({
+      month: z.string().regex(/^\d{4}-\d{2}$/).optional(),
+    }).parse(req.query);
+
+    // Default to current month if not provided
+    const now = new Date();
+    const activeMonth = month ?? `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+
     const [matched, unmatched] = await Promise.all([
       prisma.paymentsLedger.findMany({
-        where: { moveApprovals: { some: {} } },
+        where: { moveApprovals: { some: {} }, billingPeriod: activeMonth },
         include: { moveApprovals: true },
         orderBy: { paidAt: 'desc' },
       }),
@@ -267,7 +275,7 @@ export async function adminRoutes(app: FastifyInstance) {
         orderBy: { paidAt: 'desc' },
       }),
     ]);
-    return { unmatched, matched };
+    return { unmatched, matched, month: activeMonth };
   });
 
   app.patch('/api/admin/payments-ledger/:id/fee-type', { preHandler: [requireRole([UserRole.COUNCIL, UserRole.PROPERTY_MANAGER])] }, async (req, reply) => {
