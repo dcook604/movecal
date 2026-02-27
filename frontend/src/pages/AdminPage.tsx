@@ -129,7 +129,7 @@ export function AdminPage() {
   const [stats, setStats] = useState<any>();
   const [recipients, setRecipients] = useState<any[]>([]);
   const [recipientForm, setRecipientForm] = useState<any>(emptyRecipient);
-  const [settings, setSettings] = useState<any>({ smtpSecure: false, includeResidentContactInApprovalEmails: false, reminderEnabled: true });
+  const [settings, setSettings] = useState<any>({ smtpSecure: false, includeResidentContactInApprovalEmails: false, reminderEnabled: true, invoiceNinjaEnabled: false });
   const [isUpdating, setIsUpdating] = useState<string | null>(null);
   const [actionMessage, setActionMessage] = useState('');
 
@@ -967,6 +967,30 @@ export function AdminPage() {
                   </small>
                 </div>
                 <button className="btn-sm btn-green" type="submit">Create User</button>
+              </form>
+            </div>
+          </div>
+
+          {/* ── Invoice Ninja Settings ── */}
+          <div className="admin-section">
+            <h3>Invoice Ninja Integration</h3>
+            <div className="admin-form-card">
+              <form onSubmit={saveSettings}>
+                <p style={{ margin: '0 0 12px', color: '#475569', fontSize: '0.9rem' }}>
+                  When enabled, MoveCal polls Invoice Ninja every 5 minutes for paid invoices and automatically approves matching move bookings.
+                  Requires <code>INVOICE_NINJA_URL</code> and <code>INVOICE_NINJA_API_TOKEN</code> to be set in your environment variables.
+                </p>
+                <label className="checkbox-label">
+                  <input
+                    type="checkbox"
+                    checked={!!settings.invoiceNinjaEnabled}
+                    onChange={e => setSettings({ ...settings, invoiceNinjaEnabled: e.target.checked })}
+                  />
+                  Enable Invoice Ninja payment polling
+                </label>
+                <div style={{ marginTop: '12px' }}>
+                  <button className="btn-sm btn-blue" type="submit">Save</button>
+                </div>
               </form>
             </div>
           </div>

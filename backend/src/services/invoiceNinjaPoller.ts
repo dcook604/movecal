@@ -166,6 +166,9 @@ async function processInvoice(invoice: InvoiceNinjaInvoice, log: { error: (obj: 
 // ── Poller ─────────────────────────────────────────────────────────
 
 export async function runInvoiceNinjaPoll(log: { info: (msg: string) => void; error: (obj: object, msg: string) => void }): Promise<void> {
+  const settings = await prisma.appSetting.findFirst();
+  if (!settings?.invoiceNinjaEnabled) return;
+
   const since = lastPollAt ?? dayjs().subtract(STARTUP_LOOKBACK_HOURS, 'hour').toDate();
   lastPollAt = new Date();
 

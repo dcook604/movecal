@@ -133,6 +133,7 @@ model AppSetting {
   fromEmail                                   String?  @map("from_email")
   includeResidentContactInApprovalEmails      Boolean  @default(false) @map("include_resident_contact_in_approval_emails")
   reminderEnabled                             Boolean  @default(true) @map("reminder_enabled")
+  invoiceNinjaEnabled                         Boolean  @default(false) @map("invoice_ninja_enabled")
   createdAt                                   DateTime @default(now()) @map("created_at")
   updatedAt                                   DateTime @updatedAt @map("updated_at")
 
