@@ -1,0 +1,1 @@
+{"root":["./src/api.ts","./src/main.tsx","./src/vite-env.d.ts","./src/pages/AdminPage.tsx","./src/pages/LobbyTVPage.tsx","./src/pages/PaymentsLedgerPage.tsx","./src/pages/PublicCalendarPage.tsx","./src/pages/ResidentSubmissionPage.tsx"],"version":"5.9.3"}

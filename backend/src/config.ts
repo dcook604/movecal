@@ -12,7 +12,8 @@ const envSchema = z.object({
   UPLOADS_DIR: z.string().optional(),
   FRONTEND_URL: z.string().optional(),
   DATABASE_URL: z.string().optional(),
-  INVOICE_NINJA_WEBHOOK_SECRET: z.string().optional(),
+  INVOICE_NINJA_URL: z.string().optional(),
+  INVOICE_NINJA_API_TOKEN: z.string().optional(),
   ANTHROPIC_API_KEY: z.string().optional()
 });
 
@@ -69,6 +70,7 @@ export const config = {
   intakeSecret: env.INTAKE_SHARED_SECRET ?? 'dev-intake-secret',
   uploadsDir: env.UPLOADS_DIR ?? 'uploads',
   frontendOrigins,
-  invoiceNinjaWebhookSecret: env.INVOICE_NINJA_WEBHOOK_SECRET,
+  invoiceNinjaUrl: env.INVOICE_NINJA_URL,
+  invoiceNinjaApiToken: env.INVOICE_NINJA_API_TOKEN,
   anthropicApiKey: env.ANTHROPIC_API_KEY
 };
