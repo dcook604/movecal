@@ -159,3 +159,130 @@
   color: #dc2626;
   padding: 16px 0;
 }
+
+/* ── Dismiss ───────────────────────────────────────────────────── */
+
+.btn-dismiss {
+  padding: 3px 10px;
+  font-size: 0.78rem;
+  border: 1px solid #fca5a5;
+  background: #fff;
+  color: #dc2626;
+  border-radius: 5px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.btn-dismiss:hover {
+  background: #fef2f2;
+}
+
+.btn-dismiss-cancel {
+  padding: 3px 10px;
+  font-size: 0.78rem;
+  border: 1px solid #cbd5e1;
+  background: #fff;
+  color: #64748b;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.btn-dismiss-cancel:hover {
+  background: #f1f5f9;
+}
+
+.dismiss-row td {
+  background: #fff7ed;
+  border-top: none;
+  padding: 10px 16px;
+}
+
+.dismiss-form {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.dismiss-form label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #92400e;
+  white-space: nowrap;
+}
+
+.dismiss-form input[type="text"] {
+  flex: 1;
+  min-width: 240px;
+  padding: 5px 10px;
+  border: 1px solid #fdba74;
+  border-radius: 6px;
+  font-size: 0.85rem;
+}
+
+.btn-dismiss-confirm {
+  padding: 5px 14px;
+  font-size: 0.82rem;
+  background: #dc2626;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.btn-dismiss-confirm:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.btn-dismiss-confirm:not(:disabled):hover {
+  background: #b91c1c;
+}
+
+/* ── Dismissed section ─────────────────────────────────────────── */
+
+.dismissed-section {
+  margin-top: 40px;
+  border-top: 1px solid #e2e8f0;
+  padding-top: 16px;
+}
+
+.dismissed-toggle {
+  background: none;
+  border: none;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #64748b;
+  cursor: pointer;
+  padding: 0;
+  margin-bottom: 12px;
+}
+
+.dismissed-toggle:hover {
+  color: #334155;
+}
+
+.row-dismissed td {
+  color: #94a3b8;
+}
+
+.dismissed-reason {
+  font-style: italic;
+  max-width: 220px;
+}
+
+.btn-restore {
+  padding: 3px 10px;
+  font-size: 0.78rem;
+  border: 1px solid #86efac;
+  background: #fff;
+  color: #166534;
+  border-radius: 5px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.btn-restore:hover {
+  background: #f0fdf4;
+}

@@ -27,6 +27,9 @@ interface Payment {
   unit: string | null;
   paidAt: string;
   createdAt: string;
+  dismissed: boolean;
+  dismissedReason: string | null;
+  dismissedAt: string | null;
   moveApprovals?: { moveRequestId: string; approvedAt: string }[];
 }
 
@@ -50,8 +53,15 @@ export function PaymentsLedgerPage() {
   const [selectedMonth, setSelectedMonth] = useState(() => dayjs().format('YYYY-MM'));
   const [unmatched, setUnmatched] = useState<Payment[]>([]);
   const [matched, setMatched] = useState<Payment[]>([]);
+  const [dismissed, setDismissed] = useState<Payment[]>([]);
   const [loadError, setLoadError] = useState('');
   const [actionMessage, setActionMessage] = useState('');
+
+  // Dismiss state
+  const [dismissingId, setDismissingId] = useState<string | null>(null);
+  const [dismissReason, setDismissReason] = useState<Record<string, string>>({});
+  const [dismissSaving, setDismissSaving] = useState<string | null>(null);
+  const [showDismissed, setShowDismissed] = useState(false);
 
   // Inline fee-type edit state: { [paymentId]: 'move_in' | 'move_out' }
   const [pendingFeeType, setPendingFeeType] = useState<Record<string, string>>({});
@@ -80,6 +90,7 @@ export function PaymentsLedgerPage() {
       const { data } = await api.get(`/api/admin/payments-ledger?month=${month}`);
       setUnmatched(data.unmatched ?? []);
       setMatched(data.matched ?? []);
+      setDismissed(data.dismissed ?? []);
     } catch (error) {
       if (handleAuthError(error)) return;
       if (axios.isAxiosError(error) && error.response?.status === 403) {
@@ -149,6 +160,35 @@ export function PaymentsLedgerPage() {
     }
   };
 
+  const dismissPayment = async (payment: Payment) => {
+    const reason = dismissReason[payment.id]?.trim();
+    if (!reason) return;
+    setDismissSaving(payment.id);
+    setActionMessage('');
+    try {
+      await api.patch(`/api/admin/payments-ledger/${payment.id}/dismiss`, { reason });
+      setDismissingId(null);
+      setDismissReason(prev => { const n = { ...prev }; delete n[payment.id]; return n; });
+      await refresh();
+    } catch (error) {
+      if (handleAuthError(error)) return;
+      setActionMessage('Failed to dismiss payment.');
+    } finally {
+      setDismissSaving(null);
+    }
+  };
+
+  const restorePayment = async (payment: Payment) => {
+    setActionMessage('');
+    try {
+      await api.patch(`/api/admin/payments-ledger/${payment.id}/restore`);
+      await refresh();
+    } catch (error) {
+      if (handleAuthError(error)) return;
+      setActionMessage('Failed to restore payment.');
+    }
+  };
+
   // ── Login gate ──────────────────────────────────────────────────
   if (!token || !role) {
     return (
@@ -207,46 +247,78 @@ export function PaymentsLedgerPage() {
                 <th>Billing Period</th>
                 <th>Paid At</th>
                 <th>Status</th>
+                <th>Actions</th>
               </tr>
             </thead>
             <tbody>
               {unmatched.map(p => (
-                <tr key={p.id} className={p.feeType === 'unknown' ? 'row-unknown' : undefined}>
-                  <td>{p.clientId}</td>
-                  <td>{p.invoiceId}</td>
-                  <td>{p.unit ?? '—'}</td>
-                  <td>
-                    {p.feeType === 'unknown'
-                      ? (
-                        <div className="inline-fee-form">
-                          <select
-                            value={pendingFeeType[p.id] ?? ''}
-                            onChange={e => setPendingFeeType(prev => ({ ...prev, [p.id]: e.target.value }))}
-                          >
-                            <option value="">Select…</option>
-                            <option value="move_in">Move In</option>
-                            <option value="move_out">Move Out</option>
-                          </select>
+                <>
+                  <tr key={p.id} className={p.feeType === 'unknown' ? 'row-unknown' : undefined}>
+                    <td>{p.clientId}</td>
+                    <td>{p.invoiceId}</td>
+                    <td>{p.unit ?? '—'}</td>
+                    <td>
+                      {p.feeType === 'unknown'
+                        ? (
+                          <div className="inline-fee-form">
+                            <select
+                              value={pendingFeeType[p.id] ?? ''}
+                              onChange={e => setPendingFeeType(prev => ({ ...prev, [p.id]: e.target.value }))}
+                            >
+                              <option value="">Select…</option>
+                              <option value="move_in">Move In</option>
+                              <option value="move_out">Move Out</option>
+                            </select>
+                            <button
+                              disabled={!pendingFeeType[p.id] || saving === p.id}
+                              onClick={() => saveFeeType(p)}
+                            >
+                              {saving === p.id ? 'Saving…' : 'Save'}
+                            </button>
+                          </div>
+                        )
+                        : <FeeTypeBadge feeType={p.feeType} />
+                      }
+                    </td>
+                    <td>{p.billingPeriod}</td>
+                    <td>{dayjs(p.paidAt).format('MMM D, YYYY')}</td>
+                    <td>
+                      {p.feeType === 'unknown'
+                        ? <span className="status-badge needs-review">Needs Manual Review</span>
+                        : <span className="status-badge awaiting">Awaiting Move Booking</span>
+                      }
+                    </td>
+                    <td>
+                      {dismissingId === p.id
+                        ? <button className="btn-dismiss-cancel" onClick={() => setDismissingId(null)}>Cancel</button>
+                        : <button className="btn-dismiss" onClick={() => setDismissingId(p.id)}>Dismiss</button>
+                      }
+                    </td>
+                  </tr>
+                  {dismissingId === p.id && (
+                    <tr key={`${p.id}-dismiss`} className="dismiss-row">
+                      <td colSpan={8}>
+                        <div className="dismiss-form">
+                          <label>Reason for dismissal</label>
+                          <input
+                            type="text"
+                            placeholder="e.g. No move request submitted, refund issued…"
+                            value={dismissReason[p.id] ?? ''}
+                            onChange={e => setDismissReason(prev => ({ ...prev, [p.id]: e.target.value }))}
+                            autoFocus
+                          />
                           <button
-                            disabled={!pendingFeeType[p.id] || saving === p.id}
-                            onClick={() => saveFeeType(p)}
+                            className="btn-dismiss-confirm"
+                            disabled={!dismissReason[p.id]?.trim() || dismissSaving === p.id}
+                            onClick={() => dismissPayment(p)}
                           >
-                            {saving === p.id ? 'Saving…' : 'Save'}
+                            {dismissSaving === p.id ? 'Dismissing…' : 'Confirm Dismiss'}
                           </button>
                         </div>
-                      )
-                      : <FeeTypeBadge feeType={p.feeType} />
-                    }
-                  </td>
-                  <td>{p.billingPeriod}</td>
-                  <td>{dayjs(p.paidAt).format('MMM D, YYYY')}</td>
-                  <td>
-                    {p.feeType === 'unknown'
-                      ? <span className="status-badge needs-review">Needs Manual Review</span>
-                      : <span className="status-badge awaiting">Awaiting Move Booking</span>
-                    }
-                  </td>
-                </tr>
+                      </td>
+                    </tr>
+                  )}
+                </>
               ))}
             </tbody>
           </table>
@@ -302,6 +374,50 @@ export function PaymentsLedgerPage() {
           </table>
         )
       }
+
+      <div className="dismissed-section">
+        <button className="dismissed-toggle" onClick={() => setShowDismissed(v => !v)}>
+          {showDismissed ? '▾' : '▸'} Dismissed Payments ({dismissed.length})
+        </button>
+        {showDismissed && (
+          dismissed.length === 0
+            ? <p className="payments-empty">No dismissed payments.</p>
+            : (
+              <table className="payments-table">
+                <thead>
+                  <tr>
+                    <th>Client ID</th>
+                    <th>Invoice ID</th>
+                    <th>Unit</th>
+                    <th>Fee Type</th>
+                    <th>Billing Period</th>
+                    <th>Paid At</th>
+                    <th>Dismissed At</th>
+                    <th>Reason</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {dismissed.map(p => (
+                    <tr key={p.id} className="row-dismissed">
+                      <td>{p.clientId}</td>
+                      <td>{p.invoiceId}</td>
+                      <td>{p.unit ?? '—'}</td>
+                      <td><FeeTypeBadge feeType={p.feeType} /></td>
+                      <td>{p.billingPeriod}</td>
+                      <td>{dayjs(p.paidAt).format('MMM D, YYYY')}</td>
+                      <td>{p.dismissedAt ? dayjs(p.dismissedAt).format('MMM D, YYYY') : '—'}</td>
+                      <td className="dismissed-reason">{p.dismissedReason}</td>
+                      <td>
+                        <button className="btn-restore" onClick={() => restorePayment(p)}>Restore</button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )
+        )}
+      </div>
     </div>
   );
 }

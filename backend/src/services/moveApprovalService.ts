@@ -23,6 +23,7 @@ export async function checkAndApproveMoveRequest(params: {
       ],
       feeType,
       moveApprovals: { none: {} },
+      dismissed: false,
     },
   });
 

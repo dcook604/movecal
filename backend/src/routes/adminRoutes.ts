@@ -207,7 +207,7 @@ export async function adminRoutes(app: FastifyInstance) {
     const { MoveType, BookingStatus } = await import('@prisma/client');
 
     const unmatched = await prisma.paymentsLedger.findMany({
-      where: { moveApprovals: { none: {} }, feeType: { not: 'unknown' }, unit: { not: null } },
+      where: { moveApprovals: { none: {} }, dismissed: false, feeType: { not: 'unknown' }, unit: { not: null } },
     });
 
     let matchedCount = 0;
@@ -264,18 +264,49 @@ export async function adminRoutes(app: FastifyInstance) {
     const now = new Date();
     const activeMonth = month ?? `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 
-    const [matched, unmatched] = await Promise.all([
+    const [matched, unmatched, dismissed] = await Promise.all([
       prisma.paymentsLedger.findMany({
         where: { moveApprovals: { some: {} }, billingPeriod: activeMonth },
         include: { moveApprovals: true },
         orderBy: { paidAt: 'desc' },
       }),
       prisma.paymentsLedger.findMany({
-        where: { moveApprovals: { none: {} } },
+        where: { moveApprovals: { none: {} }, dismissed: false },
         orderBy: { paidAt: 'desc' },
       }),
+      prisma.paymentsLedger.findMany({
+        where: { dismissed: true },
+        orderBy: { dismissedAt: 'desc' },
+      }),
     ]);
-    return { unmatched, matched, month: activeMonth };
+    return { unmatched, matched, dismissed, month: activeMonth };
+  });
+
+  app.patch('/api/admin/payments-ledger/:id/dismiss', { preHandler: [requireRole([UserRole.COUNCIL, UserRole.PROPERTY_MANAGER])] }, async (req, reply) => {
+    const id = z.string().uuid().parse((req.params as { id: string }).id);
+    const { reason } = z.object({ reason: z.string().min(1, 'Reason is required') }).parse(req.body);
+
+    const payment = await prisma.paymentsLedger.findUnique({ where: { id } });
+    if (!payment) return reply.status(404).send({ message: 'Payment not found' });
+
+    const updated = await prisma.paymentsLedger.update({
+      where: { id },
+      data: { dismissed: true, dismissedReason: reason, dismissedAt: new Date() },
+    });
+    return { payment: updated };
+  });
+
+  app.patch('/api/admin/payments-ledger/:id/restore', { preHandler: [requireRole([UserRole.COUNCIL, UserRole.PROPERTY_MANAGER])] }, async (req, reply) => {
+    const id = z.string().uuid().parse((req.params as { id: string }).id);
+
+    const payment = await prisma.paymentsLedger.findUnique({ where: { id } });
+    if (!payment) return reply.status(404).send({ message: 'Payment not found' });
+
+    const updated = await prisma.paymentsLedger.update({
+      where: { id },
+      data: { dismissed: false, dismissedReason: null, dismissedAt: null },
+    });
+    return { payment: updated };
   });
 
   app.patch('/api/admin/payments-ledger/:id/fee-type', { preHandler: [requireRole([UserRole.COUNCIL, UserRole.PROPERTY_MANAGER])] }, async (req, reply) => {
