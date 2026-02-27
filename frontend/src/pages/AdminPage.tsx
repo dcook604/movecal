@@ -129,7 +129,7 @@ export function AdminPage() {
   const [stats, setStats] = useState<any>();
   const [recipients, setRecipients] = useState<any[]>([]);
   const [recipientForm, setRecipientForm] = useState<any>(emptyRecipient);
-  const [settings, setSettings] = useState<any>({ smtpSecure: false, includeResidentContactInApprovalEmails: false, reminderEnabled: true, invoiceNinjaEnabled: false });
+  const [settings, setSettings] = useState<any>({ smtpHost: null, smtpPort: null, smtpSecure: false, smtpUsername: null, fromName: null, fromEmail: null, includeResidentContactInApprovalEmails: false, reminderEnabled: true, invoiceNinjaEnabled: false });
   const [isUpdating, setIsUpdating] = useState<string | null>(null);
   const [actionMessage, setActionMessage] = useState('');
 
