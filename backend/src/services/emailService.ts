@@ -34,7 +34,7 @@ function row(label: string, value: string) {
   </tr>`;
 }
 
-export function bookingDetailsHtml(b: BookingEmailData, includeContact = false): string {
+export function bookingDetailsHtml(b: BookingEmailData, includeContact = false, paymentConfirmed = false): string {
   const moveLabel = MOVE_TYPE_LABELS[b.moveType] ?? b.moveType;
   const dateStr = dayjs(b.startDatetime).format('dddd, MMMM D, YYYY');
   const timeStr = `${dayjs(b.startDatetime).format('h:mm A')} – ${dayjs(b.endDatetime).format('h:mm A')}`;
@@ -49,7 +49,8 @@ export function bookingDetailsHtml(b: BookingEmailData, includeContact = false):
     row('Loading Bay', b.loadingBayRequired ? 'Yes' : 'No'),
     ...(b.companyName ? [row('Company', b.companyName)] : []),
     ...(b.notes ? [row('Notes', b.notes)] : []),
-    ...(includeContact ? [row('Email', b.residentEmail), row('Phone', b.residentPhone)] : [])
+    ...(includeContact ? [row('Email', b.residentEmail), row('Phone', b.residentPhone)] : []),
+    ...(paymentConfirmed ? [row('Payment', '<span style="color:#166534;font-weight:700">✓ Move fee confirmed paid</span>')] : [])
   ];
 
   return `<table style="border-collapse:collapse;font-family:Arial,sans-serif;font-size:14px">

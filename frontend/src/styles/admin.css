@@ -212,6 +212,18 @@
 .booking-info { flex: 1; min-width: 160px; }
 .booking-name { font-weight: 600; color: #0f172a; font-size: 0.9375rem; }
 .booking-meta { font-size: 0.8125rem; color: #64748b; margin-top: 2px; }
+.payment-matched-badge {
+  display: inline-block;
+  margin-top: 4px;
+  padding: 1px 7px;
+  background: #d1fae5;
+  color: #065f46;
+  border: 1px solid #6ee7b7;
+  border-radius: 10px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
 
 .booking-status {
   display: inline-block;

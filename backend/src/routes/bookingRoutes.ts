@@ -81,47 +81,79 @@ export async function bookingRoutes(app: FastifyInstance) {
     });
 
     // Check if payment already exists for this booking (payment-first flow)
+    let paymentConfirmed = false;
     if (booking.moveType === MoveType.MOVE_IN || booking.moveType === MoveType.MOVE_OUT) {
       const billingPeriod = dayjs(booking.moveDate).format('YYYY-MM');
       const feeType = booking.moveType === MoveType.MOVE_IN ? 'move_in' : 'move_out';
-      await checkAndApproveMoveRequest({
+      const approvalResult = await checkAndApproveMoveRequest({
         unit: booking.unit,
         feeType,
         billingPeriod,
         bookingId: booking.id,
       }).catch((err) => {
         app.log.error({ err, bookingId: booking.id }, 'Invoice approval check failed');
+        return { approved: false };
       });
+      paymentConfirmed = approvalResult.approved;
     }
 
     const moveTypeLabel = { MOVE_IN: 'Move In', MOVE_OUT: 'Move Out', DELIVERY: 'Delivery', RENO: 'Renovation' }[booking.moveType] ?? booking.moveType;
-    const submittedSubject = `Booking Request Received — ${moveTypeLabel} on ${dayjs(booking.startDatetime).format('MMM D, YYYY')}`;
+    const dateLabel = dayjs(booking.startDatetime).format('MMM D, YYYY');
 
-    await sendNotificationRecipients(
-      prisma,
-      NotifyEvent.SUBMITTED,
-      `New Booking Request — ${moveTypeLabel} for Unit ${booking.unit}`,
-      emailWrapper(
-        'New Booking Request',
-        'A new booking request has been submitted and is awaiting review.',
-        bookingDetailsHtml(booking, true)
-      )
-    ).catch((err) => {
-      app.log.error({ err, bookingId: booking.id, event: 'SUBMITTED' }, 'Failed to send notification email');
-    });
+    if (paymentConfirmed) {
+      // Booking was auto-approved — send approval emails, not a pending-review email
+      await sendNotificationRecipients(
+        prisma,
+        NotifyEvent.APPROVED,
+        `Booking Auto-Approved (Payment Confirmed) — ${moveTypeLabel} for Unit ${booking.unit}`,
+        emailWrapper(
+          'Booking Auto-Approved',
+          'A move fee payment was confirmed in Invoice Ninja. The following booking has been automatically approved.',
+          bookingDetailsHtml(booking, true, true)
+        )
+      ).catch((err) => {
+        app.log.error({ err, bookingId: booking.id, event: 'APPROVED' }, 'Failed to send auto-approval notification email');
+      });
 
-    await sendEmail(
-      prisma,
-      body.residentEmail,
-      submittedSubject,
-      emailWrapper(
-        'Booking Request Received',
-        'Your booking request has been submitted and is pending review. If no action is taken within 24 hours, it will be automatically approved.',
-        bookingDetailsHtml(booking)
-      )
-    ).catch((err) => {
-      app.log.error({ err, bookingId: booking.id, email: body.residentEmail }, 'Failed to send booking confirmation email');
-    });
+      await sendEmail(
+        prisma,
+        body.residentEmail,
+        `Booking Approved — ${moveTypeLabel} on ${dateLabel}`,
+        emailWrapper(
+          'Booking Approved',
+          'Your move fee payment has been confirmed. Your booking has been automatically approved.',
+          bookingDetailsHtml(booking, false, true)
+        )
+      ).catch((err) => {
+        app.log.error({ err, bookingId: booking.id, email: body.residentEmail }, 'Failed to send auto-approval email');
+      });
+    } else {
+      await sendNotificationRecipients(
+        prisma,
+        NotifyEvent.SUBMITTED,
+        `New Booking Request — ${moveTypeLabel} for Unit ${booking.unit}`,
+        emailWrapper(
+          'New Booking Request',
+          'A new booking request has been submitted and is awaiting review.',
+          bookingDetailsHtml(booking, true)
+        )
+      ).catch((err) => {
+        app.log.error({ err, bookingId: booking.id, event: 'SUBMITTED' }, 'Failed to send notification email');
+      });
+
+      await sendEmail(
+        prisma,
+        body.residentEmail,
+        `Booking Request Received — ${moveTypeLabel} on ${dateLabel}`,
+        emailWrapper(
+          'Booking Request Received',
+          'Your booking request has been submitted and is pending review. If no action is taken within 24 hours, it will be automatically approved.',
+          bookingDetailsHtml(booking)
+        )
+      ).catch((err) => {
+        app.log.error({ err, bookingId: booking.id, email: body.residentEmail }, 'Failed to send booking confirmation email');
+      });
+    }
 
     return booking;
   });
@@ -183,7 +215,12 @@ export async function bookingRoutes(app: FastifyInstance) {
   app.get(
     '/api/admin/bookings',
     { preHandler: [requireRole([UserRole.CONCIERGE, UserRole.COUNCIL, UserRole.PROPERTY_MANAGER])] },
-    async () => prisma.booking.findMany({ include: { documents: true }, orderBy: { startDatetime: 'asc' } })
+    async () => {
+      const bookings = await prisma.booking.findMany({ include: { documents: true }, orderBy: { startDatetime: 'asc' } });
+      const approvals = await prisma.moveApproval.findMany({ where: { moveRequestId: { in: bookings.map(b => b.id) } } });
+      const matchedIds = new Set(approvals.map(a => a.moveRequestId));
+      return bookings.map(b => ({ ...b, paymentMatched: matchedIds.has(b.id) }));
+    }
   );
 
   app.patch('/api/admin/bookings/:id', { preHandler: [requireRole([UserRole.CONCIERGE, UserRole.COUNCIL, UserRole.PROPERTY_MANAGER])] }, async (req, reply) => {
@@ -239,8 +276,12 @@ export async function bookingRoutes(app: FastifyInstance) {
     if (allowOverride) await logAudit(prisma, user.id, 'CONFLICT_OVERRIDE', updated.id, { old: existing, new: updated });
 
     if (body.status === BookingStatus.APPROVED) {
-      const settings = await prisma.appSetting.findFirst();
+      const [settings, moveApproval] = await Promise.all([
+        prisma.appSetting.findFirst(),
+        prisma.moveApproval.findFirst({ where: { moveRequestId: updated.id } }),
+      ]);
       const includeContact = !!settings?.includeResidentContactInApprovalEmails;
+      const paymentConfirmed = !!moveApproval;
       const approvedMoveLabel = { MOVE_IN: 'Move In', MOVE_OUT: 'Move Out', DELIVERY: 'Delivery', RENO: 'Renovation' }[updated.moveType] ?? updated.moveType;
       const approvedSubject = `Booking Approved — ${approvedMoveLabel} on ${dayjs(updated.startDatetime).format('MMM D, YYYY')}`;
 
@@ -251,7 +292,7 @@ export async function bookingRoutes(app: FastifyInstance) {
         emailWrapper(
           'Booking Approved',
           'Your booking request has been approved. Please see the details below.',
-          bookingDetailsHtml(updated)
+          bookingDetailsHtml(updated, false, paymentConfirmed)
         )
       ).catch((err) => {
         app.log.error({ err, bookingId: updated.id, email: updated.residentEmail }, 'Failed to send booking approval email');
@@ -264,7 +305,7 @@ export async function bookingRoutes(app: FastifyInstance) {
         emailWrapper(
           'Booking Approved',
           'The following booking has been approved.',
-          bookingDetailsHtml(updated, includeContact)
+          bookingDetailsHtml(updated, includeContact, paymentConfirmed)
         )
       ).catch((err) => {
         app.log.error({ err, bookingId: updated.id, event: 'APPROVED' }, 'Failed to send approval notification');
