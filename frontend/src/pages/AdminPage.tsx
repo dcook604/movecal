@@ -665,20 +665,41 @@ export function AdminPage() {
         const qIsHoliday = quickForm.moveDate && qRawSlots !== null && qRawSlots.length === 0;
         const qSlots = qRawSlots ? filterAvailableSlots(qRawSlots, quickTakenRanges) : qRawSlots;
 
+        const moveTypeLabel = (t: string) => ({ MOVE_IN: 'Move In', MOVE_OUT: 'Move Out', DELIVERY: 'Delivery', RENO: 'Renovation' }[t] ?? t);
+        const fmtDate = (iso: string) => new Date(iso).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+        const fmtTime = (iso: string) => new Date(iso).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+
         const renderBooking = (b: any) => (
-          <div key={b.id} className="booking-card">
-            <div className="booking-info">
-              <div className="booking-name">{b.residentName} — Unit {b.unit}</div>
-              <div className="booking-meta">
-                {b.moveType?.replace(/_/g, ' ')} · {b.startDatetime ? new Date(b.startDatetime).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : ''}
+          <div key={b.id} className={`booking-card booking-card--${b.status?.toLowerCase()}`}>
+            <div className="booking-card-body">
+              <div className="booking-card-top">
+                <span className={`move-type-chip move-type-chip--${b.moveType?.toLowerCase()}`}>{moveTypeLabel(b.moveType)}</span>
+                <span className={`booking-status ${b.status}`}>{b.status}</span>
               </div>
-              {b.paymentMatched && (
-                <div className="payment-matched-badge">
-                  Payment Confirmed{b.paymentInvoiceId ? ` · ${b.paymentInvoiceId}` : ''}
+              <div className="booking-name">{b.residentName} — Unit {b.unit}</div>
+              {b.startDatetime && (
+                <div className="booking-meta">
+                  {fmtDate(b.startDatetime)}
+                  {b.endDatetime ? ` · ${fmtTime(b.startDatetime)} – ${fmtTime(b.endDatetime)}` : ''}
                 </div>
               )}
+              {(b.residentEmail || b.residentPhone) && (
+                <div className="booking-contact">
+                  {b.residentEmail && <span>{b.residentEmail}</span>}
+                  {b.residentPhone && <span>{b.residentPhone}</span>}
+                </div>
+              )}
+              <div className="booking-tags">
+                {b.elevatorRequired && <span className="booking-tag">Elevator</span>}
+                {b.loadingBayRequired && <span className="booking-tag">Loading Bay</span>}
+                {b.paymentMatched && (
+                  <span className="payment-matched-badge">
+                    Payment Confirmed{b.paymentInvoiceId ? ` · ${b.paymentInvoiceId}` : ''}
+                  </span>
+                )}
+              </div>
+              {b.notes && <div className="booking-notes">{b.notes}</div>}
             </div>
-            <span className={`booking-status ${b.status}`}>{b.status}</span>
             <div className="booking-actions">
               <button className="btn-sm btn-green" onClick={() => updateStatus(b.id, 'APPROVED')} disabled={isUpdating === b.id}>
                 {isUpdating === b.id ? '…' : 'Approve'}
@@ -806,29 +827,49 @@ export function AdminPage() {
             <div className="bookings-list">
               {bookings.length === 0 && <p className="admin-section-desc">No bookings found.</p>}
 
-              {upcoming.length > 0 && (
-                <>
-                  {past.length > 0 && <div className="bookings-section-label">Upcoming</div>}
-                  {upcoming.map(renderBooking)}
-                </>
-              )}
+              {/* ── Needs Review ── */}
+              {(() => {
+                const group = upcoming.filter(b => b.status === 'SUBMITTED' || b.status === 'PENDING');
+                return (
+                  <div className="booking-group">
+                    <div className="booking-group-header booking-group-header--review">
+                      <span className="booking-group-title">Needs Review</span>
+                      <span className="booking-group-count">{group.length}</span>
+                    </div>
+                    {group.length === 0
+                      ? <p className="booking-group-empty">No bookings awaiting review.</p>
+                      : group.map(renderBooking)}
+                  </div>
+                );
+              })()}
 
-              {upcoming.length === 0 && past.length > 0 && (
-                <p className="admin-section-desc">No upcoming bookings.</p>
-              )}
+              {/* ── Approved ── */}
+              {(() => {
+                const group = upcoming.filter(b => b.status === 'APPROVED');
+                return (
+                  <div className="booking-group">
+                    <div className="booking-group-header booking-group-header--approved">
+                      <span className="booking-group-title">Approved</span>
+                      <span className="booking-group-count">{group.length}</span>
+                    </div>
+                    {group.length === 0
+                      ? <p className="booking-group-empty">No approved upcoming bookings.</p>
+                      : group.map(renderBooking)}
+                  </div>
+                );
+              })()}
 
+              {/* ── Past ── */}
               {past.length > 0 && (
-                <>
-                  <button type="button" className="bookings-past-toggle" onClick={() => setShowPastBookings((v) => !v)}>
-                    {showPastBookings ? 'Hide' : 'Show'} past bookings ({past.length})
+                <div className="booking-group">
+                  <button type="button" className="booking-group-header booking-group-header--past booking-group-toggle"
+                    onClick={() => setShowPastBookings(v => !v)}>
+                    <span className="booking-group-title">Past</span>
+                    <span className="booking-group-count">{past.length}</span>
+                    <span className="booking-group-chevron">{showPastBookings ? '▾' : '▸'}</span>
                   </button>
-                  {showPastBookings && (
-                    <>
-                      <div className="bookings-section-label" style={{ marginTop: '16px' }}>Past</div>
-                      {past.map(renderBooking)}
-                    </>
-                  )}
-                </>
+                  {showPastBookings && past.map(renderBooking)}
+                </div>
               )}
             </div>
           </div>
