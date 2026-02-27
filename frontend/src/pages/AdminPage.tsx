@@ -228,9 +228,15 @@ export function AdminPage() {
       setRole(nextRole);
       if (nextRole) localStorage.setItem('movecal_role', nextRole);
     } catch (error) {
-      if (axios.isAxiosError(error) && error.response?.status === 401) {
-        setLoginError('Invalid email or password.');
-        return;
+      if (axios.isAxiosError(error)) {
+        if (error.response?.status === 401) {
+          setLoginError('Invalid email or password.');
+          return;
+        }
+        if (error.response?.status === 429) {
+          setLoginError('Too many login attempts. Please wait 15 minutes and try again.');
+          return;
+        }
       }
       setLoginError('Login failed. Please try again.');
     }
