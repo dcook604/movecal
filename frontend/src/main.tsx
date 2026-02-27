@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import ReactDOM from 'react-dom/client';
 import { BrowserRouter, NavLink, Route, Routes, useLocation } from 'react-router-dom';
 import { PublicCalendarPage } from './pages/PublicCalendarPage';
@@ -14,9 +14,16 @@ function getStoredRole(): string | null {
 
 function Nav() {
   const { pathname } = useLocation();
+  const [role, setRole] = useState(getStoredRole);
+
+  useEffect(() => {
+    const update = () => setRole(getStoredRole());
+    window.addEventListener('movecal-auth', update);
+    return () => window.removeEventListener('movecal-auth', update);
+  }, []);
+
   // Hide nav on TV mode — full-screen display
   if (pathname === '/tv') return null;
-  const role = getStoredRole();
   return (
     <nav className="site-nav">
       <NavLink to="/">Public Calendar</NavLink>

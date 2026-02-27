@@ -227,6 +227,7 @@ export function AdminPage() {
       const nextRole = (data.user?.role as UserRole | undefined) ?? decodeRoleFromToken(data.token) ?? null;
       setRole(nextRole);
       if (nextRole) localStorage.setItem('movecal_role', nextRole);
+      window.dispatchEvent(new CustomEvent('movecal-auth'));
     } catch (error) {
       if (axios.isAxiosError(error)) {
         if (error.response?.status === 401) {

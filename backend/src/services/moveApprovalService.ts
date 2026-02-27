@@ -11,8 +11,10 @@ export async function checkAndApproveMoveRequest(params: {
 
   if (feeType === 'unknown') return { approved: false };
 
-  // Find a paid ledger record matching unit + fee_type + billing_period.
+  // Find an unmatched paid ledger record matching unit + fee_type.
   // Also match prefixed variants like "T4-1105" when the booking unit is "1105".
+  // Billing period is intentionally not filtered — invoices may be issued in a
+  // different month than the actual move date.
   const payment = await prisma.paymentsLedger.findFirst({
     where: {
       OR: [
@@ -20,18 +22,15 @@ export async function checkAndApproveMoveRequest(params: {
         { unit: { endsWith: `-${unit}` } },
       ],
       feeType,
-      billingPeriod,
+      moveApprovals: { none: {} },
     },
   });
 
   if (!payment) return { approved: false };
 
-  // Check no existing approval for this invoice + billing period
+  // Check no existing approval for this invoice
   const existing = await prisma.moveApproval.findFirst({
-    where: {
-      invoiceId: payment.invoiceId,
-      billingPeriod,
-    },
+    where: { invoiceId: payment.invoiceId },
   });
 
   if (existing) return { approved: false };

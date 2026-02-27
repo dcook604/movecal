@@ -165,9 +165,6 @@ async function processInvoice(invoice: InvoiceNinjaInvoice, log: { error: (obj: 
 
   if (feeType !== 'unknown' && unit) {
     const moveTypeFilter = feeType === 'move_in' ? MoveType.MOVE_IN : MoveType.MOVE_OUT;
-    const [yearStr, monthStr] = billingPeriod.split('-');
-    const monthStart = new Date(Number(yearStr), Number(monthStr) - 1, 1);
-    const monthEnd   = new Date(Number(yearStr), Number(monthStr), 1);
 
     // Also try the unit suffix after the last dash (e.g. "T4-1105" → "1105")
     const unitVariants = [unit];
@@ -177,7 +174,6 @@ async function processInvoice(invoice: InvoiceNinjaInvoice, log: { error: (obj: 
       where: {
         unit: { in: unitVariants },
         moveType: moveTypeFilter,
-        moveDate: { gte: monthStart, lt: monthEnd },
         status: { in: [BookingStatus.SUBMITTED, BookingStatus.PENDING] },
       },
     });

@@ -218,15 +218,11 @@ export async function adminRoutes(app: FastifyInstance) {
       if (unit.includes('-')) unitVariants.push(unit.split('-').pop()!);
 
       const moveTypeFilter = payment.feeType === 'move_in' ? MoveType.MOVE_IN : MoveType.MOVE_OUT;
-      const [yearStr, monthStr] = payment.billingPeriod.split('-');
-      const monthStart = new Date(Number(yearStr), Number(monthStr) - 1, 1);
-      const monthEnd   = new Date(Number(yearStr), Number(monthStr), 1);
 
       const booking = await prisma.booking.findFirst({
         where: {
           unit: { in: unitVariants },
           moveType: moveTypeFilter,
-          moveDate: { gte: monthStart, lt: monthEnd },
           status: { in: [BookingStatus.SUBMITTED, BookingStatus.PENDING, BookingStatus.APPROVED] },
         },
       });
@@ -288,9 +284,6 @@ export async function adminRoutes(app: FastifyInstance) {
     if (updated.unit) {
       const { BookingStatus, MoveType } = await import('@prisma/client');
       const moveTypeFilter = feeType === 'move_in' ? MoveType.MOVE_IN : MoveType.MOVE_OUT;
-      const [yearStr, monthStr] = updated.billingPeriod.split('-');
-      const monthStart = new Date(Number(yearStr), Number(monthStr) - 1, 1);
-      const monthEnd = new Date(Number(yearStr), Number(monthStr), 1);
 
       const unitVariants = [updated.unit];
       if (updated.unit.includes('-')) unitVariants.push(updated.unit.split('-').pop()!);
@@ -299,7 +292,6 @@ export async function adminRoutes(app: FastifyInstance) {
         where: {
           unit: { in: unitVariants },
           moveType: moveTypeFilter,
-          moveDate: { gte: monthStart, lt: monthEnd },
           status: { in: [BookingStatus.SUBMITTED, BookingStatus.PENDING] },
         },
       });
