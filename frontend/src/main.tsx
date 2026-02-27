@@ -8,16 +8,21 @@ import { LobbyTVPage } from './pages/LobbyTVPage';
 import { PaymentsLedgerPage } from './pages/PaymentsLedgerPage';
 import './styles.css';
 
+function getStoredRole(): string | null {
+  return localStorage.getItem('movecal_role');
+}
+
 function Nav() {
   const { pathname } = useLocation();
   // Hide nav on TV mode — full-screen display
   if (pathname === '/tv') return null;
+  const role = getStoredRole();
   return (
     <nav className="site-nav">
       <NavLink to="/">Public Calendar</NavLink>
       <NavLink to="/submit">Resident Submit</NavLink>
       <NavLink to="/admin">Admin</NavLink>
-      <NavLink to="/admin/payments">Payments</NavLink>
+      {role === 'PROPERTY_MANAGER' && <NavLink to="/admin/payments">Payments</NavLink>}
       <NavLink to="/tv">Lobby TV</NavLink>
     </nav>
   );
