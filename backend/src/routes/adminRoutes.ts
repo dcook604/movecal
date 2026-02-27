@@ -202,6 +202,62 @@ export async function adminRoutes(app: FastifyInstance) {
     return user;
   });
 
+  // Payments Ledger — retry matching all unmatched payments (includes already-approved bookings)
+  app.post('/api/admin/payments-ledger/retry-match', { preHandler: [requireRole([UserRole.COUNCIL, UserRole.PROPERTY_MANAGER])] }, async () => {
+    const { MoveType, BookingStatus } = await import('@prisma/client');
+
+    const unmatched = await prisma.paymentsLedger.findMany({
+      where: { moveApprovals: { none: {} }, feeType: { not: 'unknown' }, unit: { not: null } },
+    });
+
+    let matchedCount = 0;
+
+    for (const payment of unmatched) {
+      const unit = payment.unit!;
+      const unitVariants = [unit];
+      if (unit.includes('-')) unitVariants.push(unit.split('-').pop()!);
+
+      const moveTypeFilter = payment.feeType === 'move_in' ? MoveType.MOVE_IN : MoveType.MOVE_OUT;
+      const [yearStr, monthStr] = payment.billingPeriod.split('-');
+      const monthStart = new Date(Number(yearStr), Number(monthStr) - 1, 1);
+      const monthEnd   = new Date(Number(yearStr), Number(monthStr), 1);
+
+      const booking = await prisma.booking.findFirst({
+        where: {
+          unit: { in: unitVariants },
+          moveType: moveTypeFilter,
+          moveDate: { gte: monthStart, lt: monthEnd },
+          status: { in: [BookingStatus.SUBMITTED, BookingStatus.PENDING, BookingStatus.APPROVED] },
+        },
+      });
+
+      if (!booking) continue;
+
+      const existing = await prisma.moveApproval.findFirst({ where: { invoiceId: payment.invoiceId } });
+      if (existing) continue;
+
+      await prisma.moveApproval.create({
+        data: {
+          moveRequestId: booking.id,
+          clientId: payment.clientId,
+          invoiceId: payment.invoiceId,
+          billingPeriod: payment.billingPeriod,
+        },
+      });
+
+      if (booking.status !== BookingStatus.APPROVED) {
+        await prisma.booking.update({
+          where: { id: booking.id },
+          data: { status: BookingStatus.APPROVED, approvedAt: new Date() },
+        });
+      }
+
+      matchedCount++;
+    }
+
+    return { matched: matchedCount };
+  });
+
   // Payments Ledger
   app.get('/api/admin/payments-ledger', { preHandler: [requireRole([UserRole.COUNCIL, UserRole.PROPERTY_MANAGER])] }, async () => {
     const [matched, unmatched] = await Promise.all([

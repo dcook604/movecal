@@ -74,6 +74,8 @@ export function PaymentsLedgerPage() {
   const refresh = async () => {
     setLoadError('');
     try {
+      // Auto-retry matching on every refresh so unmatched payments resolve without manual action
+      await api.post('/api/admin/payments-ledger/retry-match').catch(() => {});
       const { data } = await api.get('/api/admin/payments-ledger');
       setUnmatched(data.unmatched ?? []);
       setMatched(data.matched ?? []);
@@ -108,6 +110,18 @@ export function PaymentsLedgerPage() {
   };
 
   useEffect(() => { if (!token) return; refresh(); }, [token]);
+
+  const retryMatch = async () => {
+    setActionMessage('');
+    try {
+      const { data } = await api.post('/api/admin/payments-ledger/retry-match');
+      setActionMessage(data.matched > 0 ? `Matched ${data.matched} payment(s).` : 'No new matches found.');
+      await refresh();
+    } catch (error) {
+      if (handleAuthError(error)) return;
+      setActionMessage('Retry match failed.');
+    }
+  };
 
   const saveFeeType = async (payment: Payment) => {
     const newFeeType = pendingFeeType[payment.id];
@@ -164,7 +178,8 @@ export function PaymentsLedgerPage() {
 
       <div className="page-actions">
         <button onClick={refresh}>Refresh</button>
-        {actionMessage && <span style={{ color: actionMessage.includes('Failed') ? '#dc2626' : '#166534' }}>{actionMessage}</span>}
+        <button onClick={retryMatch}>Retry Match</button>
+        {actionMessage && <span style={{ color: actionMessage.includes('failed') || actionMessage.includes('Failed') ? '#dc2626' : '#166534' }}>{actionMessage}</span>}
       </div>
 
       {loadError && <p className="payments-error">{loadError}</p>}
