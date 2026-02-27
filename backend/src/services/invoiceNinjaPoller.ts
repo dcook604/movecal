@@ -141,9 +141,13 @@ async function processInvoice(invoice: InvoiceNinjaInvoice, log: { error: (obj: 
     const monthStart = new Date(Number(yearStr), Number(monthStr) - 1, 1);
     const monthEnd   = new Date(Number(yearStr), Number(monthStr), 1);
 
+    // Also try the unit suffix after the last dash (e.g. "T4-1105" → "1105")
+    const unitVariants = [unit];
+    if (unit.includes('-')) unitVariants.push(unit.split('-').pop()!);
+
     const matchingBooking = await prisma.booking.findFirst({
       where: {
-        unit,
+        unit: { in: unitVariants },
         moveType: moveTypeFilter,
         moveDate: { gte: monthStart, lt: monthEnd },
         status: { in: [BookingStatus.SUBMITTED, BookingStatus.PENDING] },

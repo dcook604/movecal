@@ -236,9 +236,12 @@ export async function adminRoutes(app: FastifyInstance) {
       const monthStart = new Date(Number(yearStr), Number(monthStr) - 1, 1);
       const monthEnd = new Date(Number(yearStr), Number(monthStr), 1);
 
+      const unitVariants = [updated.unit];
+      if (updated.unit.includes('-')) unitVariants.push(updated.unit.split('-').pop()!);
+
       const matchingBooking = await prisma.booking.findFirst({
         where: {
-          unit: updated.unit,
+          unit: { in: unitVariants },
           moveType: moveTypeFilter,
           moveDate: { gte: monthStart, lt: monthEnd },
           status: { in: [BookingStatus.SUBMITTED, BookingStatus.PENDING] },

@@ -11,10 +11,14 @@ export async function checkAndApproveMoveRequest(params: {
 
   if (feeType === 'unknown') return { approved: false };
 
-  // Find a paid ledger record matching unit + fee_type + billing_period
+  // Find a paid ledger record matching unit + fee_type + billing_period.
+  // Also match prefixed variants like "T4-1105" when the booking unit is "1105".
   const payment = await prisma.paymentsLedger.findFirst({
     where: {
-      unit,
+      OR: [
+        { unit },
+        { unit: { endsWith: `-${unit}` } },
+      ],
       feeType,
       billingPeriod,
     },
