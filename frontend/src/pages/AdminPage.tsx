@@ -108,6 +108,16 @@ function decodeRoleFromToken(token?: string): UserRole | null {
   return null;
 }
 
+function decodeEmailFromToken(token?: string | null): string {
+  if (!token) return '';
+  const parts = token.split('.');
+  if (parts.length < 2) return '';
+  try {
+    const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
+    return payload?.email ?? '';
+  } catch { return ''; }
+}
+
 const ROLE_LABELS: Record<string, string> = {
   CONCIERGE: 'Concierge',
   COUNCIL: 'Council',
@@ -130,6 +140,7 @@ export function AdminPage() {
   const [recipients, setRecipients] = useState<any[]>([]);
   const [recipientForm, setRecipientForm] = useState<any>(emptyRecipient);
   const [settings, setSettings] = useState<any>({ smtpHost: null, smtpPort: null, smtpSecure: false, smtpUsername: null, fromName: null, fromEmail: null, includeResidentContactInApprovalEmails: false, reminderEnabled: true, invoiceNinjaEnabled: false });
+  const [testEmailTo, setTestEmailTo] = useState(() => decodeEmailFromToken(localStorage.getItem('movecal_token')));
   const [isUpdating, setIsUpdating] = useState<string | null>(null);
   const [actionMessage, setActionMessage] = useState('');
 
@@ -332,7 +343,7 @@ export function AdminPage() {
   const sendTestEmail = async () => {
     setActionMessage('');
     try {
-      await api.post('/api/admin/settings/test-email', { to: email });
+      await api.post('/api/admin/settings/test-email', { to: testEmailTo });
       setActionMessage('Test email sent successfully');
     } catch (error: any) {
       if (handleAuthError(error)) return;
@@ -1034,6 +1045,15 @@ export function AdminPage() {
                 </div>
                 <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
                   <button className="btn-sm btn-blue" type="submit">Save Settings</button>
+                </div>
+                <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap', marginTop: '10px' }}>
+                  <input
+                    type="email"
+                    placeholder="Send test email to..."
+                    value={testEmailTo}
+                    onChange={e => setTestEmailTo(e.target.value)}
+                    style={{ flex: '1', minWidth: '200px' }}
+                  />
                   <button className="btn-sm btn-slate" type="button" onClick={sendTestEmail}>Send Test Email</button>
                 </div>
               </form>
