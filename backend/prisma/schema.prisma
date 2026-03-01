@@ -79,6 +79,7 @@ model Booking {
   notes              String?
   status             BookingStatus @default(SUBMITTED)
   approvedById       String?       @map("approved_by") @db.Uuid
+  lastPaymentReminderSentAt DateTime? @map("last_payment_reminder_sent_at")
   approvedAt         DateTime?     @map("approved_at")
   publicUnitMask     String?       @map("public_unit_mask")
   createdAt          DateTime      @default(now()) @map("created_at")
@@ -134,6 +135,7 @@ model AppSetting {
   includeResidentContactInApprovalEmails      Boolean  @default(false) @map("include_resident_contact_in_approval_emails")
   reminderEnabled                             Boolean  @default(true) @map("reminder_enabled")
   invoiceNinjaEnabled                         Boolean  @default(false) @map("invoice_ninja_enabled")
+  unpaidPaymentReminderEnabled                Boolean  @default(false) @map("unpaid_payment_reminder_enabled")
   createdAt                                   DateTime @default(now()) @map("created_at")
   updatedAt                                   DateTime @updatedAt @map("updated_at")
 

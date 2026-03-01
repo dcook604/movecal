@@ -102,3 +102,17 @@ export async function sendNotificationRecipients(prisma: PrismaClient, event: No
   if (recipients.length === 0) return;
   await sendEmail(prisma, recipients.map((r) => r.email), subject, html);
 }
+
+export async function sendPaymentReminderEmail(prisma: PrismaClient, booking: BookingEmailData) {
+  await sendEmail(
+    prisma,
+    booking.residentEmail,
+    'Action Required: Payment Needed for Your Move Booking',
+    emailWrapper(
+      'Payment Reminder',
+      'Your move booking has not been confirmed because a payment has not been received. Please arrange payment as soon as possible — your booking will remain unconfirmed until payment is verified.',
+      bookingDetailsHtml(booking),
+      'You will receive this reminder every 24 hours until payment is confirmed.'
+    )
+  );
+}

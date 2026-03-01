@@ -17,6 +17,7 @@ import { systemRoutes } from './routes/systemRoutes.js';
 import { startInvoiceNinjaPoller } from './services/invoiceNinjaPoller.js';
 import { prisma } from './prisma.js';
 import { startAutoApprovalJob } from './services/autoApprovalService.js';
+import { startPaymentReminderJob } from './services/paymentReminderService.js';
 import { ZodError } from 'zod';
 
 const app = Fastify({ logger: true, bodyLimit: 2 * 1024 * 1024, trustProxy: true });
@@ -100,6 +101,7 @@ await app.register(adminRoutes);
 await app.register(systemRoutes);
 
 startAutoApprovalJob();
+startPaymentReminderJob();
 startInvoiceNinjaPoller(app.log);
 
 app.get('/health', async (_req, reply) => {

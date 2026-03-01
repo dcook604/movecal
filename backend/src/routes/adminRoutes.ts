@@ -39,7 +39,8 @@ export async function adminRoutes(app: FastifyInstance) {
         fromEmail: z.string().nullable(),
         includeResidentContactInApprovalEmails: z.boolean(),
         reminderEnabled: z.boolean(),
-        invoiceNinjaEnabled: z.boolean()
+        invoiceNinjaEnabled: z.boolean(),
+        unpaidPaymentReminderEnabled: z.boolean()
       })
       .parse(req.body);
     const existing = await prisma.appSetting.findFirst();

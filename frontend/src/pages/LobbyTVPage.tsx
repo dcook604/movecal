@@ -76,9 +76,8 @@ export function LobbyTVPage() {
   }, [bookings, now]);
 
   const upcomingEvents = useMemo(() => {
-    const cutoff = dayjs().startOf('day');
     return bookings
-      .filter((b) => dayjs(b.startDatetime.replace('Z', '')).isAfter(cutoff))
+      .filter((b) => wall(b.endDatetime) > now)
       .sort((a, b) => wall(a.startDatetime).getTime() - wall(b.startDatetime).getTime())
       .slice(0, 10);
   }, [bookings, now]);

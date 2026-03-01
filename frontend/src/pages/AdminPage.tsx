@@ -139,7 +139,7 @@ export function AdminPage() {
   const [stats, setStats] = useState<any>();
   const [recipients, setRecipients] = useState<any[]>([]);
   const [recipientForm, setRecipientForm] = useState<any>(emptyRecipient);
-  const [settings, setSettings] = useState<any>({ smtpHost: null, smtpPort: null, smtpSecure: false, smtpUsername: null, fromName: null, fromEmail: null, includeResidentContactInApprovalEmails: false, reminderEnabled: true, invoiceNinjaEnabled: false });
+  const [settings, setSettings] = useState<any>({ smtpHost: null, smtpPort: null, smtpSecure: false, smtpUsername: null, fromName: null, fromEmail: null, includeResidentContactInApprovalEmails: false, reminderEnabled: true, invoiceNinjaEnabled: false, unpaidPaymentReminderEnabled: false });
   const [testEmailTo, setTestEmailTo] = useState(() => decodeEmailFromToken(localStorage.getItem('movecal_token')));
   const [isUpdating, setIsUpdating] = useState<string | null>(null);
   const [actionMessage, setActionMessage] = useState('');
@@ -1051,6 +1051,32 @@ export function AdminPage() {
                     onChange={e => setSettings({ ...settings, invoiceNinjaEnabled: e.target.checked })}
                   />
                   Enable Invoice Ninja payment polling
+                </label>
+                <div style={{ marginTop: '12px' }}>
+                  <button className="btn-sm btn-blue" type="submit">Save</button>
+                </div>
+              </form>
+            </div>
+          </div>
+
+          {/* ── Unpaid Payment Reminders ── */}
+          <div className="admin-section">
+            <h3>Payment Reminder Emails</h3>
+            <div className="admin-form-card">
+              <form onSubmit={saveSettings}>
+                <p style={{ margin: '0 0 12px', color: '#475569', fontSize: '0.9rem' }}>
+                  When enabled, residents with SUBMITTED or PENDING bookings that have no
+                  confirmed Invoice Ninja payment will receive an email every 24 hours
+                  reminding them that their booking will not be confirmed until payment is
+                  received. Reminders stop automatically once the move date passes.
+                </p>
+                <label className="checkbox-label">
+                  <input
+                    type="checkbox"
+                    checked={!!settings.unpaidPaymentReminderEnabled}
+                    onChange={e => setSettings({ ...settings, unpaidPaymentReminderEnabled: e.target.checked })}
+                  />
+                  Send 24-hour payment reminder emails
                 </label>
                 <div style={{ marginTop: '12px' }}>
                   <button className="btn-sm btn-blue" type="submit">Save</button>
