@@ -237,14 +237,15 @@ export function PaymentsLedgerPage() {
       {unmatched.length === 0
         ? <p className="payments-empty">No unmatched payments.</p>
         : (
+          <div className="table-scroll">
           <table className="payments-table">
             <thead>
               <tr>
-                <th>Client ID</th>
-                <th>Invoice ID</th>
+                <th className="col-hide-mobile">Client ID</th>
+                <th className="col-hide-mobile">Invoice ID</th>
                 <th>Unit</th>
                 <th>Fee Type</th>
-                <th>Billing Period</th>
+                <th className="col-hide-mobile">Billing Period</th>
                 <th>Paid At</th>
                 <th>Status</th>
                 <th>Actions</th>
@@ -254,8 +255,8 @@ export function PaymentsLedgerPage() {
               {unmatched.map(p => (
                 <>
                   <tr key={p.id} className={p.feeType === 'unknown' ? 'row-unknown' : undefined}>
-                    <td>{p.clientId}</td>
-                    <td>{p.invoiceId}</td>
+                    <td className="col-hide-mobile">{p.clientId}</td>
+                    <td className="col-hide-mobile">{p.invoiceId}</td>
                     <td>{p.unit ?? '—'}</td>
                     <td>
                       {p.feeType === 'unknown'
@@ -280,7 +281,7 @@ export function PaymentsLedgerPage() {
                         : <FeeTypeBadge feeType={p.feeType} />
                       }
                     </td>
-                    <td>{p.billingPeriod}</td>
+                    <td className="col-hide-mobile">{p.billingPeriod}</td>
                     <td>{dayjs(p.paidAt).format('MMM D, YYYY')}</td>
                     <td>
                       {p.feeType === 'unknown'
@@ -322,6 +323,7 @@ export function PaymentsLedgerPage() {
               ))}
             </tbody>
           </table>
+          </div>
         )
       }
 
@@ -342,14 +344,15 @@ export function PaymentsLedgerPage() {
       {matched.length === 0
         ? <p className="payments-empty">No matched payments yet.</p>
         : (
+          <div className="table-scroll">
           <table className="payments-table">
             <thead>
               <tr>
-                <th>Client ID</th>
-                <th>Invoice ID</th>
+                <th className="col-hide-mobile">Client ID</th>
+                <th className="col-hide-mobile">Invoice ID</th>
                 <th>Unit</th>
                 <th>Fee Type</th>
-                <th>Billing Period</th>
+                <th className="col-hide-mobile">Billing Period</th>
                 <th>Paid At</th>
                 <th>Move Request ID</th>
                 <th>Approved At</th>
@@ -358,11 +361,11 @@ export function PaymentsLedgerPage() {
             <tbody>
               {matched.map(p => (
                 <tr key={p.id}>
-                  <td>{p.clientId}</td>
-                  <td>{p.invoiceId}</td>
+                  <td className="col-hide-mobile">{p.clientId}</td>
+                  <td className="col-hide-mobile">{p.invoiceId}</td>
                   <td>{p.unit ?? '—'}</td>
                   <td><FeeTypeBadge feeType={p.feeType} /></td>
-                  <td>{p.billingPeriod}</td>
+                  <td className="col-hide-mobile">{p.billingPeriod}</td>
                   <td>{dayjs(p.paidAt).format('MMM D, YYYY')}</td>
                   <td style={{ fontFamily: 'monospace', fontSize: '0.8em' }}>
                     {p.moveApprovals?.[0]?.moveRequestId ?? '—'}
@@ -372,6 +375,7 @@ export function PaymentsLedgerPage() {
               ))}
             </tbody>
           </table>
+          </div>
         )
       }
 
@@ -383,14 +387,15 @@ export function PaymentsLedgerPage() {
           dismissed.length === 0
             ? <p className="payments-empty">No dismissed payments.</p>
             : (
+              <div className="table-scroll">
               <table className="payments-table">
                 <thead>
                   <tr>
-                    <th>Client ID</th>
-                    <th>Invoice ID</th>
+                    <th className="col-hide-mobile">Client ID</th>
+                    <th className="col-hide-mobile">Invoice ID</th>
                     <th>Unit</th>
                     <th>Fee Type</th>
-                    <th>Billing Period</th>
+                    <th className="col-hide-mobile">Billing Period</th>
                     <th>Paid At</th>
                     <th>Dismissed At</th>
                     <th>Reason</th>
@@ -400,11 +405,11 @@ export function PaymentsLedgerPage() {
                 <tbody>
                   {dismissed.map(p => (
                     <tr key={p.id} className="row-dismissed">
-                      <td>{p.clientId}</td>
-                      <td>{p.invoiceId}</td>
+                      <td className="col-hide-mobile">{p.clientId}</td>
+                      <td className="col-hide-mobile">{p.invoiceId}</td>
                       <td>{p.unit ?? '—'}</td>
                       <td><FeeTypeBadge feeType={p.feeType} /></td>
-                      <td>{p.billingPeriod}</td>
+                      <td className="col-hide-mobile">{p.billingPeriod}</td>
                       <td>{dayjs(p.paidAt).format('MMM D, YYYY')}</td>
                       <td>{p.dismissedAt ? dayjs(p.dismissedAt).format('MMM D, YYYY') : '—'}</td>
                       <td className="dismissed-reason">{p.dismissedReason}</td>
@@ -415,6 +420,7 @@ export function PaymentsLedgerPage() {
                   ))}
                 </tbody>
               </table>
+              </div>
             )
         )}
       </div>

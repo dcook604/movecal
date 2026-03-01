@@ -240,6 +240,76 @@
   background: #b91c1c;
 }
 
+/* ── Responsive ─────────────────────────────────────────────────── */
+
+.table-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+@media (max-width: 768px) {
+  .payments-page {
+    padding: 16px 12px 32px;
+  }
+
+  .payments-page h1 {
+    font-size: 1.4rem;
+    margin-bottom: 16px;
+  }
+
+  .payments-page h2 {
+    font-size: 1.1rem;
+    margin: 24px 0 8px;
+  }
+
+  .payments-page .page-actions {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .month-nav-label {
+    min-width: 120px;
+    font-size: 0.9rem;
+  }
+
+  .payments-table {
+    font-size: 0.8rem;
+  }
+
+  .payments-table th,
+  .payments-table td {
+    padding: 6px 8px;
+    white-space: nowrap;
+  }
+
+  .col-hide-mobile {
+    display: none;
+  }
+
+  .dismiss-form input[type="text"] {
+    min-width: 160px;
+  }
+}
+
+@media (max-width: 480px) {
+  .payments-page {
+    padding: 12px 8px 24px;
+  }
+
+  .payments-page h1 {
+    font-size: 1.2rem;
+  }
+
+  .month-nav-label {
+    min-width: 100px;
+    font-size: 0.85rem;
+  }
+
+  .dismissed-reason {
+    max-width: 140px;
+  }
+}
+
 /* ── Dismissed section ─────────────────────────────────────────── */
 
 .dismissed-section {
