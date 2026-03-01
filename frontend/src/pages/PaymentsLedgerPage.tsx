@@ -354,7 +354,7 @@ export function PaymentsLedgerPage() {
                 <th>Fee Type</th>
                 <th className="col-hide-mobile">Billing Period</th>
                 <th>Paid At</th>
-                <th>Move Request ID</th>
+                <th className="col-hide-mobile">Move Request ID</th>
                 <th>Approved At</th>
               </tr>
             </thead>
@@ -367,7 +367,7 @@ export function PaymentsLedgerPage() {
                   <td><FeeTypeBadge feeType={p.feeType} /></td>
                   <td className="col-hide-mobile">{p.billingPeriod}</td>
                   <td>{dayjs(p.paidAt).format('MMM D, YYYY')}</td>
-                  <td style={{ fontFamily: 'monospace', fontSize: '0.8em' }}>
+                  <td className="col-hide-mobile" style={{ fontFamily: 'monospace', fontSize: '0.8em' }}>
                     {p.moveApprovals?.[0]?.moveRequestId ?? '—'}
                   </td>
                   <td>{p.moveApprovals?.[0] ? dayjs(p.moveApprovals[0].approvedAt).format('MMM D, YYYY') : '—'}</td>
@@ -397,7 +397,7 @@ export function PaymentsLedgerPage() {
                     <th>Fee Type</th>
                     <th className="col-hide-mobile">Billing Period</th>
                     <th>Paid At</th>
-                    <th>Dismissed At</th>
+                    <th className="col-hide-mobile">Dismissed At</th>
                     <th>Reason</th>
                     <th>Actions</th>
                   </tr>
@@ -411,7 +411,7 @@ export function PaymentsLedgerPage() {
                       <td><FeeTypeBadge feeType={p.feeType} /></td>
                       <td className="col-hide-mobile">{p.billingPeriod}</td>
                       <td>{dayjs(p.paidAt).format('MMM D, YYYY')}</td>
-                      <td>{p.dismissedAt ? dayjs(p.dismissedAt).format('MMM D, YYYY') : '—'}</td>
+                      <td className="col-hide-mobile">{p.dismissedAt ? dayjs(p.dismissedAt).format('MMM D, YYYY') : '—'}</td>
                       <td className="dismissed-reason">{p.dismissedReason}</td>
                       <td>
                         <button className="btn-restore" onClick={() => restorePayment(p)}>Restore</button>
