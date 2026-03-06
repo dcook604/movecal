@@ -112,6 +112,16 @@
   color: #1e40af;
 }
 
+.fee-type-badge.delivery {
+  background: #ede9fe;
+  color: #5b21b6;
+}
+
+.fee-type-badge.reno {
+  background: #ffedd5;
+  color: #9a3412;
+}
+
 .fee-type-badge.unknown {
   background: #fef3c7;
   color: #92400e;

@@ -218,7 +218,12 @@ export async function adminRoutes(app: FastifyInstance) {
       const unitVariants = [unit];
       if (unit.includes('-')) unitVariants.push(unit.split('-').pop()!);
 
-      const moveTypeFilter = payment.feeType === 'move_in' ? MoveType.MOVE_IN : MoveType.MOVE_OUT;
+      const moveTypeMap: Record<string, typeof MoveType[keyof typeof MoveType]> = {
+        move_in: MoveType.MOVE_IN, move_out: MoveType.MOVE_OUT,
+        delivery: MoveType.DELIVERY, reno: MoveType.RENO,
+      };
+      const moveTypeFilter = moveTypeMap[payment.feeType];
+      if (!moveTypeFilter) continue;
 
       const booking = await prisma.booking.findFirst({
         where: {
@@ -312,7 +317,7 @@ export async function adminRoutes(app: FastifyInstance) {
 
   app.patch('/api/admin/payments-ledger/:id/fee-type', { preHandler: [requireRole([UserRole.COUNCIL, UserRole.PROPERTY_MANAGER])] }, async (req, reply) => {
     const id = z.string().uuid().parse((req.params as { id: string }).id);
-    const { feeType } = z.object({ feeType: z.enum(['move_in', 'move_out']) }).parse(req.body);
+    const { feeType } = z.object({ feeType: z.enum(['move_in', 'move_out', 'delivery', 'reno']) }).parse(req.body);
 
     const payment = await prisma.paymentsLedger.findUnique({ where: { id } });
     if (!payment) return reply.status(404).send({ message: 'Payment not found' });
@@ -323,18 +328,22 @@ export async function adminRoutes(app: FastifyInstance) {
 
     if (updated.unit) {
       const { BookingStatus, MoveType } = await import('@prisma/client');
-      const moveTypeFilter = feeType === 'move_in' ? MoveType.MOVE_IN : MoveType.MOVE_OUT;
+      const moveTypeMap: Record<string, typeof MoveType[keyof typeof MoveType]> = {
+        move_in: MoveType.MOVE_IN, move_out: MoveType.MOVE_OUT,
+        delivery: MoveType.DELIVERY, reno: MoveType.RENO,
+      };
+      const moveTypeFilter = moveTypeMap[feeType];
 
       const unitVariants = [updated.unit];
       if (updated.unit.includes('-')) unitVariants.push(updated.unit.split('-').pop()!);
 
-      const matchingBooking = await prisma.booking.findFirst({
+      const matchingBooking = moveTypeFilter ? await prisma.booking.findFirst({
         where: {
           unit: { in: unitVariants },
           moveType: moveTypeFilter,
           status: { in: [BookingStatus.SUBMITTED, BookingStatus.PENDING] },
         },
-      });
+      }) : null;
 
       if (matchingBooking) {
         approvalResult = await checkAndApproveMoveRequest({

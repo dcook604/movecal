@@ -12,16 +12,28 @@ let lastPollAt: Date | null = null;
 
 // ── Fee-type classification ────────────────────────────────────────
 
-function classifyFeeType(productKey: string, notes: string): 'move_in' | 'move_out' | null {
+function classifyFeeType(productKey: string, notes: string): 'move_in' | 'move_out' | 'delivery' | 'reno' | null {
   const normalized = (productKey + ' ' + notes).toLowerCase().replace(/[^a-z0-9 ]/g, ' ');
-  const moveInPattern  = /\b(move in|moving in|movein|move-in|into)\b/;
-  const moveOutPattern = /\b(move out|moving out|moveout|move-out|out|exit|vacate)\b/;
-  if (moveInPattern.test(normalized))  return 'move_in';
-  if (moveOutPattern.test(normalized)) return 'move_out';
+  const deliveryPattern = /\b(deliver(?:y|ies|ed)?)\b/;
+  const renoPattern     = /\b(reno|renovation|renovate)\b/;
+  const moveInPattern   = /\b(move in|moving in|movein|move-in|into)\b/;
+  const moveOutPattern  = /\b(move out|moving out|moveout|move-out|out|exit|vacate)\b/;
+  if (deliveryPattern.test(normalized)) return 'delivery';
+  if (renoPattern.test(normalized))     return 'reno';
+  if (moveInPattern.test(normalized))   return 'move_in';
+  if (moveOutPattern.test(normalized))  return 'move_out';
   return null;
 }
 
-async function classifyWithDeepSeek(productKey: string, notes: string): Promise<'move_in' | 'move_out' | null> {
+function feeTypeToMoveType(feeType: string): MoveType | null {
+  if (feeType === 'move_in')   return MoveType.MOVE_IN;
+  if (feeType === 'move_out')  return MoveType.MOVE_OUT;
+  if (feeType === 'delivery')  return MoveType.DELIVERY;
+  if (feeType === 'reno')      return MoveType.RENO;
+  return null;
+}
+
+async function classifyWithDeepSeek(productKey: string, notes: string): Promise<'move_in' | 'move_out' | 'delivery' | 'reno' | null> {
   if (!config.deepseekApiKey) return null;
   try {
     const response = await fetch('https://api.deepseek.com/chat/completions', {
@@ -35,19 +47,19 @@ async function classifyWithDeepSeek(productKey: string, notes: string): Promise<
         max_tokens: 10,
         messages: [{
           role: 'user',
-          content: `Given this invoice line item:\nItem: "${productKey}"\nDescription: "${notes}"\nIs this a move-in fee or a move-out fee? Reply with only "move_in" or "move_out".`,
+          content: `Given this invoice line item:\nItem: "${productKey}"\nDescription: "${notes}"\nClassify this fee. Reply with only one of: "move_in", "move_out", "delivery", "reno".`,
         }],
       }),
     });
     if (!response.ok) return null;
     const json = await response.json() as { choices?: { message?: { content?: string } }[] };
     const text = json.choices?.[0]?.message?.content?.trim().toLowerCase() ?? '';
-    if (text === 'move_in' || text === 'move_out') return text as 'move_in' | 'move_out';
+    if (text === 'move_in' || text === 'move_out' || text === 'delivery' || text === 'reno') return text as 'move_in' | 'move_out' | 'delivery' | 'reno';
   } catch { /* fall through */ }
   return null;
 }
 
-async function classifyWithClaude(productKey: string, notes: string): Promise<'move_in' | 'move_out' | null> {
+async function classifyWithClaude(productKey: string, notes: string): Promise<'move_in' | 'move_out' | 'delivery' | 'reno' | null> {
   if (!config.anthropicApiKey) return null;
   try {
     const Anthropic = (await import('@anthropic-ai/sdk')).default;
@@ -57,11 +69,11 @@ async function classifyWithClaude(productKey: string, notes: string): Promise<'m
       max_tokens: 10,
       messages: [{
         role: 'user',
-        content: `Given this invoice line item:\nItem: "${productKey}"\nDescription: "${notes}"\nIs this a move-in fee or a move-out fee? Reply with only "move_in" or "move_out".`,
+        content: `Given this invoice line item:\nItem: "${productKey}"\nDescription: "${notes}"\nClassify this fee. Reply with only one of: "move_in", "move_out", "delivery", "reno".`,
       }],
     });
     const text = message.content[0].type === 'text' ? message.content[0].text.trim().toLowerCase() : '';
-    if (text === 'move_in' || text === 'move_out') return text as 'move_in' | 'move_out';
+    if (text === 'move_in' || text === 'move_out' || text === 'delivery' || text === 'reno') return text as 'move_in' | 'move_out' | 'delivery' | 'reno';
   } catch { /* fall through */ }
   return null;
 }
@@ -164,19 +176,19 @@ async function processInvoice(invoice: InvoiceNinjaInvoice, log: { error: (obj: 
   });
 
   if (feeType !== 'unknown' && unit) {
-    const moveTypeFilter = feeType === 'move_in' ? MoveType.MOVE_IN : MoveType.MOVE_OUT;
+    const moveTypeFilter = feeTypeToMoveType(feeType);
 
     // Also try the unit suffix after the last dash (e.g. "T4-1105" → "1105")
     const unitVariants = [unit];
     if (unit.includes('-')) unitVariants.push(unit.split('-').pop()!);
 
-    const matchingBooking = await prisma.booking.findFirst({
+    const matchingBooking = moveTypeFilter ? await prisma.booking.findFirst({
       where: {
         unit: { in: unitVariants },
         moveType: moveTypeFilter,
         status: { in: [BookingStatus.SUBMITTED, BookingStatus.PENDING] },
       },
-    });
+    }) : null;
 
     if (matchingBooking) {
       await checkAndApproveMoveRequest({

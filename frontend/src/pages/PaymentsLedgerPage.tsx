@@ -34,8 +34,10 @@ interface Payment {
 }
 
 function FeeTypeBadge({ feeType }: { feeType: string }) {
-  if (feeType === 'move_in') return <span className="fee-type-badge move-in">Move In</span>;
+  if (feeType === 'move_in')  return <span className="fee-type-badge move-in">Move In</span>;
   if (feeType === 'move_out') return <span className="fee-type-badge move-out">Move Out</span>;
+  if (feeType === 'delivery') return <span className="fee-type-badge delivery">Delivery</span>;
+  if (feeType === 'reno')     return <span className="fee-type-badge reno">Reno</span>;
   return <span className="fee-type-badge unknown">Unknown</span>;
 }
 
@@ -269,6 +271,8 @@ export function PaymentsLedgerPage() {
                               <option value="">Select…</option>
                               <option value="move_in">Move In</option>
                               <option value="move_out">Move Out</option>
+                              <option value="delivery">Delivery</option>
+                              <option value="reno">Reno</option>
                             </select>
                             <button
                               disabled={!pendingFeeType[p.id] || saving === p.id}
