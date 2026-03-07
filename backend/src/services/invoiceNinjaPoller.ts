@@ -47,13 +47,14 @@ async function classifyWithDeepSeek(productKey: string, notes: string): Promise<
         max_tokens: 10,
         messages: [{
           role: 'user',
-          content: `Given this invoice line item:\nItem: "${productKey}"\nDescription: "${notes}"\nClassify this fee. Reply with only one of: "move_in", "move_out", "delivery", "reno".`,
+          content: `Given this invoice line item:\nItem: "${productKey}"\nDescription: "${notes}"\nClassify this fee. Reply with only one of: "move_in", "move_out", "delivery", "reno", "none". Use "none" if the item is not a move/delivery/reno fee (e.g. key deposit, parking, bike room, amenity booking).`,
         }],
       }),
     });
     if (!response.ok) return null;
     const json = await response.json() as { choices?: { message?: { content?: string } }[] };
     const text = json.choices?.[0]?.message?.content?.trim().toLowerCase() ?? '';
+    if (text === 'none') return null;
     if (text === 'move_in' || text === 'move_out' || text === 'delivery' || text === 'reno') return text as 'move_in' | 'move_out' | 'delivery' | 'reno';
   } catch { /* fall through */ }
   return null;
@@ -69,10 +70,11 @@ async function classifyWithClaude(productKey: string, notes: string): Promise<'m
       max_tokens: 10,
       messages: [{
         role: 'user',
-        content: `Given this invoice line item:\nItem: "${productKey}"\nDescription: "${notes}"\nClassify this fee. Reply with only one of: "move_in", "move_out", "delivery", "reno".`,
+        content: `Given this invoice line item:\nItem: "${productKey}"\nDescription: "${notes}"\nClassify this fee. Reply with only one of: "move_in", "move_out", "delivery", "reno", "none". Use "none" if the item is not a move/delivery/reno fee (e.g. key deposit, parking, bike room, amenity booking).`,
       }],
     });
     const text = message.content[0].type === 'text' ? message.content[0].text.trim().toLowerCase() : '';
+    if (text === 'none') return null;
     if (text === 'move_in' || text === 'move_out' || text === 'delivery' || text === 'reno') return text as 'move_in' | 'move_out' | 'delivery' | 'reno';
   } catch { /* fall through */ }
   return null;

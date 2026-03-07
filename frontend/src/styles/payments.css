@@ -201,6 +201,34 @@
   background: #f1f5f9;
 }
 
+.btn-edit-fee {
+  padding: 2px 8px;
+  font-size: 0.75rem;
+  border: 1px solid #cbd5e1;
+  background: #fff;
+  color: #64748b;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.btn-edit-fee:hover {
+  background: #f1f5f9;
+}
+
+.btn-edit-cancel {
+  padding: 3px 10px;
+  font-size: 0.78rem;
+  border: 1px solid #cbd5e1;
+  background: #fff;
+  color: #64748b;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.btn-edit-cancel:hover {
+  background: #f1f5f9;
+}
+
 .dismiss-row td {
   background: #fff7ed;
   border-top: none;

@@ -68,6 +68,7 @@ export function PaymentsLedgerPage() {
   // Inline fee-type edit state: { [paymentId]: 'move_in' | 'move_out' }
   const [pendingFeeType, setPendingFeeType] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState<string | null>(null);
+  const [editingFeeType, setEditingFeeType] = useState<Set<string>>(new Set());
 
   const canManageSettings = role === 'COUNCIL' || role === 'PROPERTY_MANAGER';
 
@@ -261,7 +262,7 @@ export function PaymentsLedgerPage() {
                     <td className="col-hide-mobile">{p.invoiceId}</td>
                     <td>{p.unit ?? '—'}</td>
                     <td>
-                      {p.feeType === 'unknown'
+                      {(p.feeType === 'unknown' || editingFeeType.has(p.id))
                         ? (
                           <div className="inline-fee-form">
                             <select
@@ -280,9 +281,23 @@ export function PaymentsLedgerPage() {
                             >
                               {saving === p.id ? 'Saving…' : 'Save'}
                             </button>
+                            {p.feeType !== 'unknown' && (
+                              <button className="btn-edit-cancel" onClick={() => {
+                                setEditingFeeType(prev => { const n = new Set(prev); n.delete(p.id); return n; });
+                                setPendingFeeType(prev => { const n = { ...prev }; delete n[p.id]; return n; });
+                              }}>Cancel</button>
+                            )}
                           </div>
                         )
-                        : <FeeTypeBadge feeType={p.feeType} />
+                        : (
+                          <div className="inline-fee-form">
+                            <FeeTypeBadge feeType={p.feeType} />
+                            <button className="btn-edit-fee" onClick={() => {
+                              setEditingFeeType(prev => new Set(prev).add(p.id));
+                              setPendingFeeType(prev => ({ ...prev, [p.id]: p.feeType }));
+                            }}>Edit</button>
+                          </div>
+                        )
                       }
                     </td>
                     <td className="col-hide-mobile">{p.billingPeriod}</td>
