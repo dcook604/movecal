@@ -358,6 +358,67 @@ export async function adminRoutes(app: FastifyInstance) {
     return { payment: updated, approved: approvalResult.approved };
   });
 
+  // Search bookings for manual payment matching
+  app.get('/api/admin/payments-ledger/bookings-search', { preHandler: [requireRole([UserRole.COUNCIL, UserRole.PROPERTY_MANAGER])] }, async (req) => {
+    const { unit } = z.object({ unit: z.string().optional() }).parse(req.query);
+
+    const where = unit ? {
+      OR: [
+        { unit: { contains: unit, mode: 'insensitive' as const } },
+        { unit: { endsWith: `-${unit}` } },
+      ],
+    } : {};
+
+    const bookings = await prisma.booking.findMany({
+      where,
+      orderBy: { moveDate: 'desc' },
+      take: 50,
+    });
+
+    const approvals = await prisma.moveApproval.findMany({
+      where: { moveRequestId: { in: bookings.map(b => b.id) } },
+    });
+    const approvalByBooking = new Map(approvals.map(a => [a.moveRequestId, a]));
+
+    return bookings.map(b => ({
+      ...b,
+      paymentMatched: approvalByBooking.has(b.id),
+      paymentInvoiceId: approvalByBooking.get(b.id)?.invoiceId ?? null,
+    }));
+  });
+
+  // Manually match a payment to a booking
+  app.post('/api/admin/payments-ledger/:id/manual-match', { preHandler: [requireRole([UserRole.COUNCIL, UserRole.PROPERTY_MANAGER])] }, async (req, reply) => {
+    const id = z.string().uuid().parse((req.params as { id: string }).id);
+    const { bookingId } = z.object({ bookingId: z.string().uuid() }).parse(req.body);
+
+    const payment = await prisma.paymentsLedger.findUnique({ where: { id } });
+    if (!payment) return reply.status(404).send({ message: 'Payment not found' });
+
+    const existingApproval = await prisma.moveApproval.findFirst({ where: { invoiceId: payment.invoiceId } });
+    if (existingApproval) return reply.status(409).send({ message: 'Payment is already matched to a booking' });
+
+    const booking = await prisma.booking.findUnique({ where: { id: bookingId } });
+    if (!booking) return reply.status(404).send({ message: 'Booking not found' });
+
+    await prisma.moveApproval.create({
+      data: {
+        moveRequestId: bookingId,
+        clientId: payment.clientId,
+        invoiceId: payment.invoiceId,
+        billingPeriod: payment.billingPeriod,
+      },
+    });
+
+    if (booking.status !== BookingStatus.APPROVED) {
+      await prisma.booking.update({
+        where: { id: bookingId },
+        data: { status: BookingStatus.APPROVED, approvedAt: new Date() },
+      });
+    }
+    return { ok: true };
+  });
+
   // Delete user
   app.delete('/api/admin/users/:id', { preHandler: [requireRole([UserRole.COUNCIL, UserRole.PROPERTY_MANAGER])] }, async (req, reply) => {
     const userId = z.string().uuid().parse((req.params as { id: string }).id);

@@ -33,6 +33,17 @@ interface Payment {
   moveApprovals?: { moveRequestId: string; approvedAt: string }[];
 }
 
+interface BookingOption {
+  id: string;
+  unit: string;
+  moveType: string;
+  status: string;
+  moveDate: string;
+  residentName: string;
+  paymentMatched: boolean;
+  paymentInvoiceId: string | null;
+}
+
 function FeeTypeBadge({ feeType }: { feeType: string }) {
   if (feeType === 'move_in')  return <span className="fee-type-badge move-in">Move In</span>;
   if (feeType === 'move_out') return <span className="fee-type-badge move-out">Move Out</span>;
@@ -69,6 +80,14 @@ export function PaymentsLedgerPage() {
   const [pendingFeeType, setPendingFeeType] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState<string | null>(null);
   const [editingFeeType, setEditingFeeType] = useState<Set<string>>(new Set());
+
+  // Manual match state
+  const [matchingId, setMatchingId] = useState<string | null>(null);
+  const [matchBookings, setMatchBookings] = useState<BookingOption[]>([]);
+  const [matchLoading, setMatchLoading] = useState(false);
+  const [matchUnit, setMatchUnit] = useState('');
+  const [selectedBookingId, setSelectedBookingId] = useState('');
+  const [matchSaving, setMatchSaving] = useState(false);
 
   const canManageSettings = role === 'COUNCIL' || role === 'PROPERTY_MANAGER';
 
@@ -192,6 +211,51 @@ export function PaymentsLedgerPage() {
     }
   };
 
+  const openManualMatch = async (payment: Payment) => {
+    setMatchingId(payment.id);
+    setSelectedBookingId('');
+    setMatchUnit(payment.unit ?? '');
+    await searchMatchBookings(payment.unit ?? '');
+  };
+
+  const searchMatchBookings = async (unit: string) => {
+    setMatchLoading(true);
+    try {
+      const params = unit ? `?unit=${encodeURIComponent(unit)}` : '';
+      const { data } = await api.get(`/api/admin/payments-ledger/bookings-search${params}`);
+      setMatchBookings(data ?? []);
+    } catch {
+      setMatchBookings([]);
+    } finally {
+      setMatchLoading(false);
+    }
+  };
+
+  const confirmManualMatch = async (payment: Payment) => {
+    if (!selectedBookingId) return;
+    setMatchSaving(true);
+    setActionMessage('');
+    try {
+      await api.post(`/api/admin/payments-ledger/${payment.id}/manual-match`, { bookingId: selectedBookingId });
+      setMatchingId(null);
+      setSelectedBookingId('');
+      setActionMessage('Payment manually matched and booking approved.');
+      await refresh();
+    } catch (error) {
+      if (handleAuthError(error)) return;
+      if (axios.isAxiosError(error) && error.response?.data?.message) {
+        setActionMessage(error.response.data.message);
+      } else {
+        setActionMessage('Failed to match payment.');
+      }
+    } finally {
+      setMatchSaving(false);
+    }
+  };
+
+  const formatMoveType = (t: string) =>
+    t === 'MOVE_IN' ? 'Move In' : t === 'MOVE_OUT' ? 'Move Out' : t === 'DELIVERY' ? 'Delivery' : t === 'RENO' ? 'Reno' : t;
+
   // ── Login gate ──────────────────────────────────────────────────
   if (!token || !role) {
     return (
@@ -309,12 +373,71 @@ export function PaymentsLedgerPage() {
                       }
                     </td>
                     <td>
-                      {dismissingId === p.id
-                        ? <button className="btn-dismiss-cancel" onClick={() => setDismissingId(null)}>Cancel</button>
-                        : <button className="btn-dismiss" onClick={() => setDismissingId(p.id)}>Dismiss</button>
-                      }
+                      <div className="action-btns">
+                        {matchingId === p.id
+                          ? <button className="btn-dismiss-cancel" onClick={() => setMatchingId(null)}>Cancel</button>
+                          : <button className="btn-match" onClick={() => openManualMatch(p)}>Match</button>
+                        }
+                        {dismissingId === p.id
+                          ? <button className="btn-dismiss-cancel" onClick={() => setDismissingId(null)}>Cancel</button>
+                          : <button className="btn-dismiss" onClick={() => { setMatchingId(null); setDismissingId(p.id); }}>Dismiss</button>
+                        }
+                      </div>
                     </td>
                   </tr>
+                  {matchingId === p.id && (
+                    <tr key={`${p.id}-match`} className="match-row">
+                      <td colSpan={8}>
+                        <div className="match-form">
+                          <div className="match-search">
+                            <label>Search by unit</label>
+                            <input
+                              type="text"
+                              value={matchUnit}
+                              onChange={e => setMatchUnit(e.target.value)}
+                              placeholder="e.g. 3701"
+                            />
+                            <button onClick={() => searchMatchBookings(matchUnit)} disabled={matchLoading}>
+                              {matchLoading ? 'Searching…' : 'Search'}
+                            </button>
+                          </div>
+                          {matchBookings.length === 0 && !matchLoading && (
+                            <p className="match-empty">No bookings found.</p>
+                          )}
+                          {matchBookings.length > 0 && (
+                            <div className="match-booking-list">
+                              {matchBookings.map(b => (
+                                <label key={b.id} className={`match-booking-option${b.paymentMatched ? ' already-matched' : ''}`}>
+                                  <input
+                                    type="radio"
+                                    name={`match-booking-${p.id}`}
+                                    value={b.id}
+                                    checked={selectedBookingId === b.id}
+                                    onChange={() => setSelectedBookingId(b.id)}
+                                    disabled={b.paymentMatched}
+                                  />
+                                  <span className="match-booking-info">
+                                    <strong>Unit {b.unit}</strong> — {formatMoveType(b.moveType)} — {dayjs(b.moveDate).format('MMM D, YYYY')} — {b.residentName} — <span className="match-status">{b.status}</span>
+                                    {b.paymentMatched && <span className="match-already"> (already matched)</span>}
+                                  </span>
+                                </label>
+                              ))}
+                            </div>
+                          )}
+                          <div className="match-actions">
+                            <button
+                              className="btn-match-confirm"
+                              disabled={!selectedBookingId || matchSaving}
+                              onClick={() => confirmManualMatch(p)}
+                            >
+                              {matchSaving ? 'Matching…' : 'Confirm Match'}
+                            </button>
+                            <button className="btn-dismiss-cancel" onClick={() => setMatchingId(null)}>Cancel</button>
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
                   {dismissingId === p.id && (
                     <tr key={`${p.id}-dismiss`} className="dismiss-row">
                       <td colSpan={8}>
