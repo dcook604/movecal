@@ -94,6 +94,32 @@
 /* Inline holiday warning under the date field */
 .slot-holiday-msg { margin: 4px 0 8px; }
 
+/* ── Field-level validation ──────────────────────────────────── */
+.field-error {
+  display: block;
+  color: #dc2626;
+  font-size: 0.8125rem;
+  margin-top: 4px;
+}
+
+.input-error {
+  border-color: #dc2626 !important;
+  outline-color: #dc2626;
+}
+
+.notes-counter {
+  display: block;
+  text-align: right;
+  font-size: 0.75rem;
+  color: #94a3b8;
+  margin-top: 2px;
+}
+
+.notes-counter--over {
+  color: #dc2626;
+  font-weight: 600;
+}
+
 /* ── Bylaws acceptance ───────────────────────────────────────── */
 .bylaws-acceptance {
   background: #fefce8;

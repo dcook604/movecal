@@ -104,6 +104,37 @@ function getSlotsForDateAndType(dateStr: string, moveType: string): Slot[] | nul
   return isWeekend ? MOVE_WEEKEND_SLOTS : MOVE_WEEKDAY_SLOTS;
 }
 
+// ── Validation helpers ─────────────────────────────────────────
+function validateName(v: string) {
+  if (!v.trim()) return 'Name is required';
+  if (v.trim().length < 2) return 'Name must be at least 2 characters';
+  return '';
+}
+function validateEmail(v: string) {
+  if (!v.trim()) return 'Email is required';
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim())) return 'Enter a valid email address';
+  return '';
+}
+function validatePhone(v: string) {
+  if (!v.trim()) return 'Phone number is required';
+  if (v.replace(/\D/g, '').length < 10) return 'Enter a valid 10-digit phone number';
+  return '';
+}
+function validateUnit(v: string) {
+  if (!v.trim()) return 'Unit number is required';
+  if (!/^\d{1,4}[A-Za-z]?$/.test(v.trim())) return 'Enter a valid unit number (e.g. 1204)';
+  return '';
+}
+function validateDate(v: string) {
+  if (!v) return 'Please select a date';
+  const today = dayjs().format('YYYY-MM-DD');
+  if (v < today) return 'Date cannot be in the past';
+  return '';
+}
+const NOTES_MAX = 500;
+
+type FieldErrors = Partial<Record<'residentName' | 'residentEmail' | 'residentPhone' | 'unit' | 'moveDate' | 'notes', string>>;
+
 export function ResidentSubmissionPage() {
   const [form, setForm] = useState<any>({ moveType: 'MOVE_IN', elevatorRequired: true, loadingBayRequired: false });
   const [slot, setSlot] = useState('');
@@ -113,6 +144,30 @@ export function ResidentSubmissionPage() {
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [takenRanges, setTakenRanges] = useState<{ start: string; end: string }[]>([]);
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
+  const [touched, setTouched] = useState<Set<string>>(new Set());
+
+  function getFieldError(field: keyof FieldErrors, value: string): string {
+    if (field === 'residentName') return validateName(value);
+    if (field === 'residentEmail') return validateEmail(value);
+    if (field === 'residentPhone') return validatePhone(value);
+    if (field === 'unit') return validateUnit(value);
+    if (field === 'moveDate') return validateDate(value);
+    if (field === 'notes') return value.length > NOTES_MAX ? `Notes cannot exceed ${NOTES_MAX} characters` : '';
+    return '';
+  }
+
+  function handleBlur(field: keyof FieldErrors, value: string) {
+    setTouched(prev => new Set(prev).add(field));
+    setFieldErrors(prev => ({ ...prev, [field]: getFieldError(field, value) }));
+  }
+
+  function handleFieldChange(field: keyof FieldErrors, value: string, extra?: object) {
+    setForm((prev: any) => ({ ...prev, [field]: value, ...extra }));
+    if (touched.has(field)) {
+      setFieldErrors(prev => ({ ...prev, [field]: getFieldError(field, value) }));
+    }
+  }
 
   useEffect(() => {
     if (!form.moveDate) { setTakenRanges([]); return; }
@@ -126,8 +181,8 @@ export function ResidentSubmissionPage() {
   const availableSlots = rawSlots ? filterAvailableSlots(rawSlots, takenRanges) : rawSlots;
 
   const handleDateChange = (dateStr: string) => {
-    setForm({ ...form, moveDate: dateStr });
     setSlot('');
+    // form state is set by handleFieldChange
   };
 
   const handleMoveTypeChange = (moveType: string) => {
@@ -138,16 +193,24 @@ export function ResidentSubmissionPage() {
   const submit = async (e: FormEvent) => {
     e.preventDefault();
 
-    if (!form.residentName || !form.residentEmail || !form.residentPhone || !form.unit) {
-      setError('Please fill in all required fields');
+    // Run all field validations
+    const allErrors: FieldErrors = {
+      residentName:  validateName(form.residentName ?? ''),
+      residentEmail: validateEmail(form.residentEmail ?? ''),
+      residentPhone: validatePhone(form.residentPhone ?? ''),
+      unit:          validateUnit(form.unit ?? ''),
+      moveDate:      validateDate(form.moveDate ?? ''),
+      notes:         (form.notes ?? '').length > NOTES_MAX ? `Notes cannot exceed ${NOTES_MAX} characters` : '',
+    };
+    const hasFieldErrors = Object.values(allErrors).some(v => v);
+    if (hasFieldErrors) {
+      setFieldErrors(allErrors);
+      setTouched(new Set(['residentName', 'residentEmail', 'residentPhone', 'unit', 'moveDate', 'notes']));
+      setError('Please fix the errors above before submitting');
       setMessage('');
       return;
     }
-    if (!form.moveDate) {
-      setError('Please select a date');
-      setMessage('');
-      return;
-    }
+
     if (isHoliday) {
       setError('Bookings are not permitted on statutory holidays');
       setMessage('');
@@ -188,6 +251,8 @@ export function ResidentSubmissionPage() {
       setSlot('');
       setAccepted(false);
       setAcceptedFees(false);
+      setFieldErrors({});
+      setTouched(new Set());
     } catch (err: any) {
       setError(err.response?.data?.message || 'Failed to submit request. Please try again.');
     } finally {
@@ -247,29 +312,41 @@ export function ResidentSubmissionPage() {
             <div className="form-field">
               <label htmlFor="resident-name" className="required">Resident Name</label>
               <input id="resident-name" placeholder="e.g. Jane Smith"
+                className={fieldErrors.residentName ? 'input-error' : ''}
                 value={form.residentName ?? ''}
-                onChange={(e) => setForm({ ...form, residentName: e.target.value })} />
+                onChange={(e) => handleFieldChange('residentName', e.target.value)}
+                onBlur={(e) => handleBlur('residentName', e.target.value)} />
+              {fieldErrors.residentName && <span className="field-error">{fieldErrors.residentName}</span>}
             </div>
 
             <div className="form-field">
               <label htmlFor="resident-email" className="required">Resident Email</label>
               <input id="resident-email" type="email" placeholder="name@example.com"
+                className={fieldErrors.residentEmail ? 'input-error' : ''}
                 value={form.residentEmail ?? ''}
-                onChange={(e) => setForm({ ...form, residentEmail: e.target.value })} />
+                onChange={(e) => handleFieldChange('residentEmail', e.target.value)}
+                onBlur={(e) => handleBlur('residentEmail', e.target.value)} />
+              {fieldErrors.residentEmail && <span className="field-error">{fieldErrors.residentEmail}</span>}
             </div>
 
             <div className="form-field">
               <label htmlFor="resident-phone" className="required">Resident Phone</label>
-              <input id="resident-phone" placeholder="e.g. 604-555-1234"
+              <input id="resident-phone" type="tel" placeholder="e.g. 604-555-1234"
+                className={fieldErrors.residentPhone ? 'input-error' : ''}
                 value={form.residentPhone ?? ''}
-                onChange={(e) => setForm({ ...form, residentPhone: e.target.value })} />
+                onChange={(e) => handleFieldChange('residentPhone', e.target.value)}
+                onBlur={(e) => handleBlur('residentPhone', e.target.value)} />
+              {fieldErrors.residentPhone && <span className="field-error">{fieldErrors.residentPhone}</span>}
             </div>
 
             <div className="form-field">
               <label htmlFor="unit" className="required">Unit</label>
               <input id="unit" placeholder="e.g. 1204"
+                className={fieldErrors.unit ? 'input-error' : ''}
                 value={form.unit ?? ''}
-                onChange={(e) => setForm({ ...form, unit: e.target.value })} />
+                onChange={(e) => handleFieldChange('unit', e.target.value)}
+                onBlur={(e) => handleBlur('unit', e.target.value)} />
+              {fieldErrors.unit && <span className="field-error">{fieldErrors.unit}</span>}
             </div>
           </fieldset>
 
@@ -290,8 +367,12 @@ export function ResidentSubmissionPage() {
             <div className="form-field">
               <label htmlFor="move-date" className="required">Date</label>
               <input id="move-date" type="date"
+                min={dayjs().format('YYYY-MM-DD')}
+                className={fieldErrors.moveDate ? 'input-error' : ''}
                 value={form.moveDate ?? ''}
-                onChange={(e) => handleDateChange(e.target.value)} />
+                onChange={(e) => { handleDateChange(e.target.value); handleFieldChange('moveDate', e.target.value); }}
+                onBlur={(e) => handleBlur('moveDate', e.target.value)} />
+              {fieldErrors.moveDate && <span className="field-error">{fieldErrors.moveDate}</span>}
             </div>
 
             {isHoliday && (
@@ -320,8 +401,15 @@ export function ResidentSubmissionPage() {
             <div className="form-field">
               <label htmlFor="notes">Notes</label>
               <textarea id="notes" rows={3} placeholder="Optional details"
+                className={fieldErrors.notes ? 'input-error' : ''}
+                maxLength={NOTES_MAX + 1}
                 value={form.notes ?? ''}
-                onChange={(e) => setForm({ ...form, notes: e.target.value })} />
+                onChange={(e) => handleFieldChange('notes', e.target.value)}
+                onBlur={(e) => handleBlur('notes', e.target.value)} />
+              <span className={`notes-counter${(form.notes ?? '').length > NOTES_MAX ? ' notes-counter--over' : ''}`}>
+                {(form.notes ?? '').length}/{NOTES_MAX}
+              </span>
+              {fieldErrors.notes && <span className="field-error">{fieldErrors.notes}</span>}
             </div>
           </fieldset>
 
