@@ -214,8 +214,13 @@ export function PaymentsLedgerPage() {
   const openManualMatch = async (payment: Payment) => {
     setMatchingId(payment.id);
     setSelectedBookingId('');
-    setMatchUnit(payment.unit ?? '');
-    await searchMatchBookings(payment.unit ?? '');
+    // Payment units may include a tower prefix (e.g. "T4-2203"), but bookings
+    // store only the numeric unit as entered by the resident (e.g. "2203").
+    // Strip any leading prefix so the auto-search finds the right bookings.
+    const rawUnit = payment.unit ?? '';
+    const searchUnit = rawUnit.includes('-') ? rawUnit.split('-').pop()! : rawUnit;
+    setMatchUnit(searchUnit);
+    await searchMatchBookings(searchUnit);
   };
 
   const searchMatchBookings = async (unit: string) => {
