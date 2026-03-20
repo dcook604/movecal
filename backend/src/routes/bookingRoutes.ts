@@ -56,7 +56,7 @@ export async function bookingRoutes(app: FastifyInstance) {
     const booking = await prisma.$transaction(async (tx) => {
       await assertNoConflict(
         tx,
-        { startDatetime: body.startDatetime, endDatetime: body.endDatetime, elevatorRequired: body.elevatorRequired },
+        { startDatetime: body.startDatetime, endDatetime: body.endDatetime, elevatorRequired: body.elevatorRequired, moveType: body.moveType },
         false
       );
       return tx.booking.create({
@@ -97,7 +97,7 @@ export async function bookingRoutes(app: FastifyInstance) {
       paymentConfirmed = approvalResult.approved;
     }
 
-    const moveTypeLabel = { MOVE_IN: 'Move In', MOVE_OUT: 'Move Out', DELIVERY: 'Delivery', RENO: 'Renovation' }[booking.moveType] ?? booking.moveType;
+    const moveTypeLabel = { MOVE_IN: 'Move In', MOVE_OUT: 'Move Out', DELIVERY: 'Delivery', RENO: 'Renovation', OPEN_HOUSE: 'Open House' }[booking.moveType] ?? booking.moveType;
     const dateLabel = dayjs(booking.startDatetime).format('MMM D, YYYY');
 
     if (paymentConfirmed) {
@@ -176,7 +176,7 @@ export async function bookingRoutes(app: FastifyInstance) {
     const booking = await prisma.$transaction(async (tx) => {
       await assertNoConflict(
         tx,
-        { startDatetime: body.startDatetime, endDatetime: body.endDatetime, elevatorRequired: body.elevatorRequired },
+        { startDatetime: body.startDatetime, endDatetime: body.endDatetime, elevatorRequired: body.elevatorRequired, moveType: body.moveType },
         allowOverride
       );
 
@@ -259,7 +259,8 @@ export async function bookingRoutes(app: FastifyInstance) {
           id: existing.id,
           startDatetime: body.startDatetime ?? existing.startDatetime,
           endDatetime: body.endDatetime ?? existing.endDatetime,
-          elevatorRequired: existing.elevatorRequired
+          elevatorRequired: existing.elevatorRequired,
+          moveType: existing.moveType,
         },
         allowOverride
       );
@@ -285,7 +286,7 @@ export async function bookingRoutes(app: FastifyInstance) {
       ]);
       const includeContact = !!settings?.includeResidentContactInApprovalEmails;
       const paymentConfirmed = !!moveApproval;
-      const approvedMoveLabel = { MOVE_IN: 'Move In', MOVE_OUT: 'Move Out', DELIVERY: 'Delivery', RENO: 'Renovation' }[updated.moveType] ?? updated.moveType;
+      const approvedMoveLabel = { MOVE_IN: 'Move In', MOVE_OUT: 'Move Out', DELIVERY: 'Delivery', RENO: 'Renovation', OPEN_HOUSE: 'Open House' }[updated.moveType] ?? updated.moveType;
       const approvedSubject = `Booking Approved — ${approvedMoveLabel} on ${dayjs(updated.startDatetime).format('MMM D, YYYY')}`;
 
       await sendEmail(
@@ -318,7 +319,7 @@ export async function bookingRoutes(app: FastifyInstance) {
     }
 
     if (body.status === BookingStatus.REJECTED) {
-      const rejectedMoveLabel = { MOVE_IN: 'Move In', MOVE_OUT: 'Move Out', DELIVERY: 'Delivery', RENO: 'Renovation' }[updated.moveType] ?? updated.moveType;
+      const rejectedMoveLabel = { MOVE_IN: 'Move In', MOVE_OUT: 'Move Out', DELIVERY: 'Delivery', RENO: 'Renovation', OPEN_HOUSE: 'Open House' }[updated.moveType] ?? updated.moveType;
       const rejectedSubject = `Booking Not Approved — ${rejectedMoveLabel} on ${dayjs(updated.startDatetime).format('MMM D, YYYY')}`;
 
       await sendEmail(

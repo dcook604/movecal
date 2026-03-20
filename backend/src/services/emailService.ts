@@ -9,7 +9,8 @@ const MOVE_TYPE_LABELS: Record<MoveType, string> = {
   MOVE_IN: 'Move In',
   MOVE_OUT: 'Move Out',
   DELIVERY: 'Delivery',
-  RENO: 'Renovation'
+  RENO: 'Renovation',
+  OPEN_HOUSE: 'Open House',
 };
 
 type BookingEmailData = {

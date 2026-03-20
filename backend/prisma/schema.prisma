@@ -18,6 +18,7 @@ enum MoveType {
   MOVE_OUT
   DELIVERY
   RENO
+  OPEN_HOUSE
 }
 
 enum BookingStatus {

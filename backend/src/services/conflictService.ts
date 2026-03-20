@@ -12,6 +12,7 @@ export type ConflictCandidate = {
   startDatetime: Date;
   endDatetime: Date;
   elevatorRequired: boolean;
+  moveType?: string;
 };
 
 export function validateMoveHours(startDatetime: Date, endDatetime: Date) {
@@ -40,17 +41,36 @@ export function hasElevatorConflict(existing: Array<{ startDatetime: Date; endDa
 
 export async function assertNoConflict(prismaTx: Prisma.TransactionClient, candidate: ConflictCandidate, allowOverride: boolean) {
   validateMoveHours(candidate.startDatetime, candidate.endDatetime);
+
+  const timeOverlapWhere = {
+    id: candidate.id ? { not: candidate.id } : undefined,
+    status: { in: [BookingStatus.SUBMITTED, BookingStatus.PENDING, BookingStatus.APPROVED] },
+    startDatetime: { lte: candidate.endDatetime },
+    endDatetime: { gte: candidate.startDatetime },
+  };
+
+  if (candidate.moveType === 'OPEN_HOUSE') {
+    // OPEN_HOUSE must not overlap with any booking whatsoever
+    const anyConflict = await prismaTx.booking.findFirst({ where: timeOverlapWhere });
+    if (!allowOverride && anyConflict) {
+      throw new Error('Open House cannot overlap with an existing booking');
+    }
+    return;
+  }
+
+  // For all other types: block if an OPEN_HOUSE booking overlaps
+  const openHouseConflict = await prismaTx.booking.findFirst({
+    where: { ...timeOverlapWhere, moveType: 'OPEN_HOUSE' as any },
+  });
+  if (!allowOverride && openHouseConflict) {
+    throw new Error('Booking conflicts with an existing Open House');
+  }
+
+  // Elevator conflict check
   const existing = await prismaTx.booking.findMany({
-    where: {
-      elevatorRequired: true,
-      status: { in: [BookingStatus.SUBMITTED, BookingStatus.PENDING, BookingStatus.APPROVED] },
-      id: candidate.id ? { not: candidate.id } : undefined,
-      startDatetime: { lte: candidate.endDatetime },
-      endDatetime: { gte: candidate.startDatetime }
-    },
+    where: { ...timeOverlapWhere, elevatorRequired: true },
     select: { startDatetime: true, endDatetime: true, elevatorRequired: true }
   });
-
   if (!allowOverride && hasElevatorConflict(existing, candidate)) {
     throw new Error('Elevator conflict detected');
   }

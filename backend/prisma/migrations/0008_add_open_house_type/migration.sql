@@ -1,0 +1,2 @@
+-- Add OPEN_HOUSE value to MoveType enum
+ALTER TYPE "MoveType" ADD VALUE IF NOT EXISTS 'OPEN_HOUSE';

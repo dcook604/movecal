@@ -18,6 +18,11 @@ const MOVE_WEEKEND_SLOTS: Slot[] = [
   { label: '2:00 PM – 5:00 PM',  start: '14:00', end: '17:00' },
 ];
 
+// Fixed slot for OPEN_HOUSE (weekends only)
+const OPEN_HOUSE_SLOT: Slot[] = [
+  { label: '2:00 PM – 5:00 PM', start: '14:00', end: '17:00' },
+];
+
 // BC Statutory Holidays 2025–2030 (mirrors backend list)
 const STATUTORY_HOLIDAYS = new Set([
   // 2025
@@ -89,6 +94,10 @@ function getSlotsForDateAndType(dateStr: string, moveType: string): Slot[] | nul
   if (STATUTORY_HOLIDAYS.has(dateStr)) return []; // holiday — no slots
   const dow = dayjs(dateStr).day(); // 0 Sun, 6 Sat
   const isWeekend = dow === 0 || dow === 6;
+
+  if (moveType === 'OPEN_HOUSE') {
+    return isWeekend ? OPEN_HOUSE_SLOT : []; // weekends only
+  }
 
   if (moveType === 'DELIVERY') {
     const [rangeStart, rangeEnd] = isWeekend ? [8 * 60, 17 * 60] : [10 * 60, 16 * 60];
@@ -176,8 +185,10 @@ export function ResidentSubmissionPage() {
       .catch(() => setTakenRanges([]));
   }, [form.moveDate]);
 
+  const isHoliday = !!form.moveDate && STATUTORY_HOLIDAYS.has(form.moveDate);
+  const isOpenHouseWeekday = form.moveType === 'OPEN_HOUSE' && !!form.moveDate && !isHoliday &&
+    (() => { const d = dayjs(form.moveDate).day(); return d !== 0 && d !== 6; })();
   const rawSlots = getSlotsForDateAndType(form.moveDate ?? '', form.moveType ?? 'MOVE_IN');
-  const isHoliday = form.moveDate && rawSlots !== null && rawSlots.length === 0;
   const availableSlots = rawSlots ? filterAvailableSlots(rawSlots, takenRanges) : rawSlots;
 
   const handleDateChange = (dateStr: string) => {
@@ -213,6 +224,11 @@ export function ResidentSubmissionPage() {
 
     if (isHoliday) {
       setError('Bookings are not permitted on statutory holidays');
+      setMessage('');
+      return;
+    }
+    if (isOpenHouseWeekday) {
+      setError('Open House bookings are only available on Saturdays and Sundays');
       setMessage('');
       return;
     }
@@ -261,6 +277,7 @@ export function ResidentSubmissionPage() {
   };
 
   const isDeliveryOrReno = form.moveType === 'DELIVERY' || form.moveType === 'RENO';
+  const isOpenHouseType = form.moveType === 'OPEN_HOUSE';
   const blockLabel = form.moveType === 'DELIVERY' ? '30-minute blocks' : '1-hour slots';
 
   return (
@@ -270,7 +287,16 @@ export function ResidentSubmissionPage() {
 
         <div className="move-times-notice">
           <h3 className="move-times-heading">Permitted Times</h3>
-          {isDeliveryOrReno ? (
+          {isOpenHouseType ? (
+            <div className="move-times-grid">
+              <div>
+                <strong>Saturday &amp; Sunday only</strong>
+                <ul className="move-times-list">
+                  <li>2:00 PM – 5:00 PM</li>
+                </ul>
+              </div>
+            </div>
+          ) : isDeliveryOrReno ? (
             <div className="move-times-grid">
               <div>
                 <strong>Monday – Friday</strong>
@@ -361,6 +387,7 @@ export function ResidentSubmissionPage() {
                 <option value="MOVE_OUT">Move Out</option>
                 <option value="DELIVERY">Delivery</option>
                 <option value="RENO">Renovation</option>
+                <option value="OPEN_HOUSE">Open House</option>
               </select>
             </div>
 
@@ -380,6 +407,11 @@ export function ResidentSubmissionPage() {
                 This date is a statutory holiday — no bookings are permitted.
               </p>
             )}
+            {isOpenHouseWeekday && (
+              <p className="error-message slot-holiday-msg">
+                Open House bookings are only available on Saturdays and Sundays.
+              </p>
+            )}
 
             <div className="form-field">
               <label htmlFor="time-slot" className="required">Time Slot</label>
@@ -387,7 +419,7 @@ export function ResidentSubmissionPage() {
                 id="time-slot"
                 value={slot}
                 onChange={(e) => setSlot(e.target.value)}
-                disabled={!form.moveDate || isHoliday || availableSlots?.length === 0}
+                disabled={!form.moveDate || isHoliday || isOpenHouseWeekday || availableSlots?.length === 0}
               >
                 <option value="">
                   {!form.moveDate ? 'Select a date first' : availableSlots?.length === 0 ? 'No slots available' : 'Select a time slot'}

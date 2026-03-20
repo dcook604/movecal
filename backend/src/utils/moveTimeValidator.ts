@@ -163,6 +163,17 @@ export function validateMoveTime(startDatetime: Date, endDatetime: Date, moveTyp
   const endMins   = end.hour()   * 60 + end.minute();
   const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
 
+  // OPEN_HOUSE: fixed 2pm–5pm slot, weekends only
+  if (moveType === 'OPEN_HOUSE') {
+    if (!isWeekend) {
+      return { valid: false, error: 'Open House bookings are only permitted on Saturdays and Sundays' };
+    }
+    if (startMins !== 14 * 60 || endMins !== 17 * 60) {
+      return { valid: false, error: 'Open House bookings must be from 2:00 PM to 5:00 PM' };
+    }
+    return { valid: true };
+  }
+
   // DELIVERY: 30-minute blocks within allowed range
   if (moveType === 'DELIVERY') {
     const durationMins = end.diff(start, 'minute');
@@ -228,6 +239,7 @@ export function getPermittedMoveTimes(): string {
   return `Bookings are permitted within the following slots:
 • Monday–Friday: 10:00 AM–1:00 PM or 1:00 PM–4:00 PM (moves); 10:00 AM–4:00 PM (deliveries/renos)
 • Saturday–Sunday: 8:00 AM–11:00 AM, 11:00 AM–2:00 PM, or 2:00 PM–5:00 PM (moves); 8:00 AM–5:00 PM (deliveries/renos)
+• Open House: Saturday or Sunday only, 2:00 PM–5:00 PM
 • NO BOOKINGS PERMITTED ON STATUTORY HOLIDAYS`;
 }
 
