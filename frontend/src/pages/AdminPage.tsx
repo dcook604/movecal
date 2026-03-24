@@ -182,6 +182,9 @@ export function AdminPage() {
   const [editingBookingId, setEditingBookingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<any>({});
   const [editSlot, setEditSlot] = useState('');
+  const [editOriginalSlot, setEditOriginalSlot] = useState('');
+  const [editOriginalStartDatetime, setEditOriginalStartDatetime] = useState('');
+  const [editOriginalEndDatetime, setEditOriginalEndDatetime] = useState('');
   const [editError, setEditError] = useState('');
   const [isSavingEdit, setIsSavingEdit] = useState(false);
   const [editTakenRanges, setEditTakenRanges] = useState<{ start: string; end: string }[]>([]);
@@ -599,6 +602,9 @@ export function AdminPage() {
       notes: b.notes ?? '',
     });
     setEditSlot(`${hh}:${mm}`);
+    setEditOriginalSlot(`${hh}:${mm}`);
+    setEditOriginalStartDatetime(b.startDatetime);
+    setEditOriginalEndDatetime(b.endDatetime);
     setEditError('');
     setEditTakenRanges([]);
   };
@@ -607,6 +613,9 @@ export function AdminPage() {
     setEditingBookingId(null);
     setEditForm({});
     setEditSlot('');
+    setEditOriginalSlot('');
+    setEditOriginalStartDatetime('');
+    setEditOriginalEndDatetime('');
     setEditError('');
   };
 
@@ -618,9 +627,10 @@ export function AdminPage() {
 
     const slots = getSlotsForDateAndType(editForm.moveDate, editForm.moveType);
     const selected = slots?.find((s) => s.start === editSlot);
-    if (!selected) { setEditError('Please select a valid time slot.'); return; }
-    const startDatetime = `${editForm.moveDate}T${selected.start}:00`;
-    const endDatetime   = `${editForm.moveDate}T${selected.end}:00`;
+    const isKeepingOriginalSlot = editSlot === editOriginalSlot && !!editOriginalStartDatetime;
+    if (!selected && !isKeepingOriginalSlot) { setEditError('Please select a valid time slot.'); return; }
+    const startDatetime = selected ? `${editForm.moveDate}T${selected.start}:00` : editOriginalStartDatetime;
+    const endDatetime   = selected ? `${editForm.moveDate}T${selected.end}:00`   : editOriginalEndDatetime;
 
     setIsSavingEdit(true);
     setEditError('');
