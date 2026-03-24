@@ -94,6 +94,7 @@ export async function adminRoutes(app: FastifyInstance) {
         name: true,
         email: true,
         role: true,
+        mustChangePassword: true,
         createdAt: true
       },
       orderBy: { createdAt: 'desc' }
@@ -154,7 +155,8 @@ export async function adminRoutes(app: FastifyInstance) {
       name: z.string().min(1).max(200).optional(),
       email: z.string().email().max(320).optional(),
       role: z.nativeEnum(UserRole).optional(),
-      password: z.string().min(8).optional()
+      password: z.string().min(8).optional(),
+      mustChangePassword: z.boolean().optional()
     }).parse(req.body);
 
     // Prevent users from modifying themselves to avoid lockout
@@ -181,6 +183,12 @@ export async function adminRoutes(app: FastifyInstance) {
 
     if (body.password) {
       updateData.passwordHash = await bcrypt.hash(body.password, 10);
+      // When admin explicitly sets a new password, respect the mustChangePassword toggle
+      // (handled below); don't auto-clear it here
+    }
+
+    if (body.mustChangePassword !== undefined) {
+      updateData.mustChangePassword = body.mustChangePassword;
     }
 
     const user = await prisma.user.update({
@@ -191,6 +199,7 @@ export async function adminRoutes(app: FastifyInstance) {
         name: true,
         email: true,
         role: true,
+        mustChangePassword: true,
         createdAt: true
       }
     });

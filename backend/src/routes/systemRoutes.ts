@@ -48,8 +48,8 @@ export async function systemRoutes(app: FastifyInstance) {
     if (!user || !(await bcrypt.compare(body.password, user.passwordHash))) {
       return reply.status(401).send({ message: 'Invalid credentials' });
     }
-    const token = await reply.jwtSign({ id: user.id, role: user.role, email: user.email, name: user.name });
-    return { token, user: { id: user.id, role: user.role, name: user.name, email: user.email } };
+    const token = await reply.jwtSign({ id: user.id, role: user.role, email: user.email, name: user.name, mustChangePassword: user.mustChangePassword });
+    return { token, user: { id: user.id, role: user.role, name: user.name, email: user.email, mustChangePassword: user.mustChangePassword } };
   });
 
   // Change password endpoint
@@ -76,10 +76,10 @@ export async function systemRoutes(app: FastifyInstance) {
     // Hash new password
     const newPasswordHash = await bcrypt.hash(body.newPassword, 10);
 
-    // Update password
+    // Update password and clear any forced-change flag
     await prisma.user.update({
       where: { id: user.id },
-      data: { passwordHash: newPasswordHash }
+      data: { passwordHash: newPasswordHash, mustChangePassword: false }
     });
 
     return { message: 'Password changed successfully' };

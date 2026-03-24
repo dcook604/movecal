@@ -7,6 +7,7 @@ declare module '@fastify/jwt' {
       role: 'CONCIERGE' | 'COUNCIL' | 'PROPERTY_MANAGER';
       email: string;
       name: string;
+      mustChangePassword: boolean;
     };
   }
 }

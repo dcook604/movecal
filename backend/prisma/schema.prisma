@@ -40,8 +40,9 @@ model User {
   name         String
   email        String     @unique
   role         UserRole
-  passwordHash String     @map("password_hash")
-  createdAt    DateTime   @default(now()) @map("created_at")
+  passwordHash       String    @map("password_hash")
+  mustChangePassword Boolean   @default(false) @map("must_change_password")
+  createdAt          DateTime  @default(now()) @map("created_at")
   bookings     Booking[]  @relation("CreatedBookings")
   approvals    Booking[]  @relation("ApprovedBookings")
   auditLogs    AuditLog[]

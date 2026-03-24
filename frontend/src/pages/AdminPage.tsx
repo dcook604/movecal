@@ -159,9 +159,12 @@ export function AdminPage() {
   const [accountMessage, setAccountMessage] = useState('');
 
   const [users, setUsers] = useState<any[]>([]);
-  const [userForm, setUserForm] = useState({ name: '', email: '', password: '', role: 'CONCIERGE' });
+  const [userForm, setUserForm] = useState({ name: '', email: '', password: '', role: 'CONCIERGE', mustChangePassword: false });
   const [editingUserId, setEditingUserId] = useState<string | null>(null);
   const [userMessage, setUserMessage] = useState('');
+  const [forcePasswordChange, setForcePasswordChange] = useState(false);
+  const [forcePasswordForm, setForcePasswordForm] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' });
+  const [forcePasswordMsg, setForcePasswordMsg] = useState('');
 
   const emptyQuickEntry = {
     residentName: '', residentEmail: '', residentPhone: '', unit: '',
@@ -227,6 +230,7 @@ export function AdminPage() {
       const nextRole = (data.user?.role as UserRole | undefined) ?? decodeRoleFromToken(data.token) ?? null;
       setRole(nextRole);
       if (nextRole) localStorage.setItem('movecal_role', nextRole);
+      if (data.user?.mustChangePassword) setForcePasswordChange(true);
       window.dispatchEvent(new CustomEvent('movecal-auth'));
     } catch (error) {
       if (axios.isAxiosError(error)) {
@@ -373,6 +377,25 @@ export function AdminPage() {
     }
   };
 
+  const submitForcePasswordChange = async (e: FormEvent) => {
+    e.preventDefault();
+    setForcePasswordMsg('');
+    if (forcePasswordForm.newPassword !== forcePasswordForm.confirmPassword) { setForcePasswordMsg('Passwords do not match'); return; }
+    if (forcePasswordForm.newPassword.length < 8) { setForcePasswordMsg('Password must be at least 8 characters'); return; }
+    try {
+      await api.post('/api/auth/change-password', {
+        currentPassword: forcePasswordForm.currentPassword,
+        newPassword: forcePasswordForm.newPassword,
+        confirmPassword: forcePasswordForm.confirmPassword,
+      });
+      setForcePasswordChange(false);
+      setForcePasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
+    } catch (error: any) {
+      if (handleAuthError(error)) return;
+      setForcePasswordMsg(error.response?.data?.message || 'Failed to change password.');
+    }
+  };
+
   const changeEmail = async (e: FormEvent) => {
     e.preventDefault();
     setAccountMessage('');
@@ -398,7 +421,7 @@ export function AdminPage() {
     try {
       await api.post('/api/admin/users', userForm);
       setUserMessage('User created successfully');
-      setUserForm({ name: '', email: '', password: '', role: 'CONCIERGE' });
+      setUserForm({ name: '', email: '', password: '', role: 'CONCIERGE', mustChangePassword: false });
       await refresh();
     } catch (error: any) {
       if (handleAuthError(error)) return;
@@ -409,12 +432,12 @@ export function AdminPage() {
   const updateUser = async (userId: string) => {
     setUserMessage('');
     try {
-      const updateData: any = { name: userForm.name, email: userForm.email, role: userForm.role };
+      const updateData: any = { name: userForm.name, email: userForm.email, role: userForm.role, mustChangePassword: userForm.mustChangePassword };
       if (userForm.password) updateData.password = userForm.password;
       await api.patch(`/api/admin/users/${userId}`, updateData);
       setUserMessage('User updated successfully');
       setEditingUserId(null);
-      setUserForm({ name: '', email: '', password: '', role: 'CONCIERGE' });
+      setUserForm({ name: '', email: '', password: '', role: 'CONCIERGE', mustChangePassword: false });
       await refresh();
     } catch (error: any) {
       if (handleAuthError(error)) return;
@@ -437,13 +460,13 @@ export function AdminPage() {
 
   const startEditUser = (user: any) => {
     setEditingUserId(user.id);
-    setUserForm({ name: user.name, email: user.email, password: '', role: user.role });
+    setUserForm({ name: user.name, email: user.email, password: '', role: user.role, mustChangePassword: !!user.mustChangePassword });
     setUserMessage('');
   };
 
   const cancelEditUser = () => {
     setEditingUserId(null);
-    setUserForm({ name: '', email: '', password: '', role: 'CONCIERGE' });
+    setUserForm({ name: '', email: '', password: '', role: 'CONCIERGE', mustChangePassword: false });
     setUserMessage('');
   };
 
@@ -572,6 +595,38 @@ export function AdminPage() {
   /* ── Dashboard ───────────────────────────────────────────── */
   return (
     <div className="admin-page">
+
+      {/* ── Forced password change overlay ── */}
+      {forcePasswordChange && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }}>
+          <div style={{ background: '#fff', borderRadius: '12px', padding: '32px 28px', width: '100%', maxWidth: '420px', boxShadow: '0 20px 40px rgba(0,0,0,0.3)' }}>
+            <h2 style={{ margin: '0 0 8px', fontSize: '1.25rem' }}>Password Change Required</h2>
+            <p style={{ margin: '0 0 20px', color: '#475569', fontSize: '0.9rem' }}>
+              Your administrator requires you to set a new password before continuing.
+            </p>
+            {forcePasswordMsg && <p className="error-message">{forcePasswordMsg}</p>}
+            <form onSubmit={submitForcePasswordChange}>
+              <div className="form-field">
+                <label htmlFor="force-current-password">Current Password</label>
+                <input id="force-current-password" type="password" value={forcePasswordForm.currentPassword}
+                  onChange={(e) => setForcePasswordForm({ ...forcePasswordForm, currentPassword: e.target.value })} required />
+              </div>
+              <div className="form-field">
+                <label htmlFor="force-new-password">New Password</label>
+                <input id="force-new-password" type="password" value={forcePasswordForm.newPassword}
+                  onChange={(e) => setForcePasswordForm({ ...forcePasswordForm, newPassword: e.target.value })} minLength={8} required />
+                <small>Minimum 8 characters</small>
+              </div>
+              <div className="form-field">
+                <label htmlFor="force-confirm-password">Confirm New Password</label>
+                <input id="force-confirm-password" type="password" value={forcePasswordForm.confirmPassword}
+                  onChange={(e) => setForcePasswordForm({ ...forcePasswordForm, confirmPassword: e.target.value })} required />
+              </div>
+              <button className="btn-sm btn-blue" type="submit" style={{ width: '100%', padding: '10px' }}>Set New Password</button>
+            </form>
+          </div>
+        </div>
+      )}
 
       <div className="admin-title-row">
         <h2>Dashboard</h2>
@@ -968,6 +1023,13 @@ export function AdminPage() {
                           <option value="PROPERTY_MANAGER">Property Manager</option>
                         </select>
                       </div>
+                      <div className="form-field">
+                        <label className="checkbox-label">
+                          <input type="checkbox" checked={userForm.mustChangePassword}
+                            onChange={(e) => setUserForm({ ...userForm, mustChangePassword: e.target.checked })} />
+                          Require password change on next login
+                        </label>
+                      </div>
                       <div className="user-edit-actions">
                         <button className="btn-sm btn-green" type="button" onClick={() => updateUser(u.id)}>Save Changes</button>
                         <button className="btn-sm btn-slate" type="button" onClick={cancelEditUser}>Cancel</button>
@@ -989,6 +1051,9 @@ export function AdminPage() {
                         <span className={`role-badge ${u.role === 'CONCIERGE' ? 'standard' : 'elevated'}`}>
                           {ROLE_LABELS[u.role] || u.role}
                         </span>
+                        {u.mustChangePassword && (
+                          <span className="role-badge" style={{ background: '#f59e0b' }}>Must Change Password</span>
+                        )}
                         <span className="user-created">Created: {new Date(u.createdAt).toLocaleDateString()}</span>
                       </div>
                     </div>
