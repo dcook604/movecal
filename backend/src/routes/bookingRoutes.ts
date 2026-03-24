@@ -8,7 +8,7 @@ import { nanoid } from 'nanoid';
 import { prisma } from '../prisma.js';
 import { assertNoConflict } from '../services/conflictService.js';
 import { requireAuth, requireRole } from '../middleware/auth.js';
-import { sendEmail, sendNotificationRecipients, bookingDetailsHtml, emailWrapper } from '../services/emailService.js';
+import { sendEmail, sendNotificationRecipients, bookingDetailsHtml, emailWrapper, sendPaymentConfirmationToDcook } from '../services/emailService.js';
 import { logAudit } from '../services/auditService.js';
 import { config } from '../config.js';
 import { validateMoveTime } from '../utils/moveTimeValidator.js';
@@ -126,6 +126,10 @@ export async function bookingRoutes(app: FastifyInstance) {
         )
       ).catch((err) => {
         app.log.error({ err, bookingId: booking.id, email: body.residentEmail }, 'Failed to send auto-approval email');
+      });
+
+      await sendPaymentConfirmationToDcook(prisma, booking).catch((err) => {
+        app.log.error({ err, bookingId: booking.id }, 'Failed to send payment confirmation to dcook');
       });
     } else {
       await sendNotificationRecipients(

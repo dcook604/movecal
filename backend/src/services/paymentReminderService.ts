@@ -1,6 +1,6 @@
-import { BookingStatus, UserRole } from '@prisma/client';
+import { BookingStatus, MoveType, UserRole } from '@prisma/client';
 import { prisma } from '../prisma.js';
-import { sendPaymentReminderEmail } from './emailService.js';
+import { sendPaymentReminderEmail, sendEarlyPaymentWarningEmail } from './emailService.js';
 import { logAudit } from './auditService.js';
 
 const CHECK_INTERVAL_MS = 5 * 60 * 1000; // every 5 minutes
@@ -33,7 +33,29 @@ export async function runPaymentReminders() {
     },
   });
 
-  for (const booking of bookings.filter(b => !paidIds.has(b.id))) {
+  const unpaidBookings = bookings.filter(b => !paidIds.has(b.id));
+
+  // 30-minute early warning: MOVE_IN, MOVE_OUT, DELIVERY bookings with no payment after 30 min
+  const earlyWarningTypes = new Set<MoveType>([MoveType.MOVE_IN, MoveType.MOVE_OUT, MoveType.DELIVERY]);
+  const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000);
+
+  for (const booking of unpaidBookings) {
+    if (!earlyWarningTypes.has(booking.moveType)) continue;
+    if (booking.earlyPaymentReminderSentAt !== null) continue;
+    if (booking.createdAt > thirtyMinutesAgo) continue;
+
+    try {
+      await sendEarlyPaymentWarningEmail(prisma, booking);
+      await prisma.booking.update({
+        where: { id: booking.id },
+        data: { earlyPaymentReminderSentAt: new Date() },
+      });
+    } catch {
+      // continue processing remaining bookings
+    }
+  }
+
+  for (const booking of unpaidBookings) {
     try {
       await sendPaymentReminderEmail(prisma, booking);
       await prisma.booking.update({

@@ -3,6 +3,7 @@ import { BookingStatus, MoveType } from '@prisma/client';
 import { prisma } from '../prisma.js';
 import { config } from '../config.js';
 import { checkAndApproveMoveRequest } from './moveApprovalService.js';
+import { sendPaymentConfirmationToDcook } from './emailService.js';
 
 const POLL_INTERVAL_MS = 5 * 60 * 1000; // every 5 minutes
 // On startup, look back 24 hours to catch anything missed while the server was down
@@ -193,14 +194,21 @@ async function processInvoice(invoice: InvoiceNinjaInvoice, log: { error: (obj: 
     }) : null;
 
     if (matchingBooking) {
-      await checkAndApproveMoveRequest({
+      const approvalResult = await checkAndApproveMoveRequest({
         unit,
         feeType,
         billingPeriod,
         bookingId: matchingBooking.id,
       }).catch((err) => {
         log.error({ err, invoiceId: invoice.id, bookingId: matchingBooking.id }, 'Invoice approval check failed');
+        return { approved: false as const };
       });
+
+      if (approvalResult.approved) {
+        await sendPaymentConfirmationToDcook(prisma, matchingBooking).catch((err) => {
+          log.error({ err, bookingId: matchingBooking.id }, 'Failed to send payment confirmation to dcook');
+        });
+      }
     }
   }
 }

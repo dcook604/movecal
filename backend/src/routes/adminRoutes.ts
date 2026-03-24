@@ -5,7 +5,7 @@ import bcrypt from 'bcryptjs';
 import { prisma } from '../prisma.js';
 import { requireRole } from '../middleware/auth.js';
 import { encrypt } from '../utils/crypto.js';
-import { sendEmail } from '../services/emailService.js';
+import { sendEmail, sendPaymentConfirmationToDcook } from '../services/emailService.js';
 import { logAudit } from '../services/auditService.js';
 import { checkAndApproveMoveRequest } from '../services/moveApprovalService.js';
 
@@ -254,6 +254,8 @@ export async function adminRoutes(app: FastifyInstance) {
         });
       }
 
+      await sendPaymentConfirmationToDcook(prisma, booking).catch(() => {});
+
       matchedCount++;
     }
 
@@ -416,6 +418,11 @@ export async function adminRoutes(app: FastifyInstance) {
         data: { status: BookingStatus.APPROVED, approvedAt: new Date() },
       });
     }
+
+    await sendPaymentConfirmationToDcook(prisma, booking).catch((err) => {
+      app.log.error({ err, bookingId }, 'Failed to send payment confirmation to dcook');
+    });
+
     return { ok: true };
   });
 

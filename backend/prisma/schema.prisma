@@ -80,7 +80,8 @@ model Booking {
   notes              String?
   status             BookingStatus @default(SUBMITTED)
   approvedById       String?       @map("approved_by") @db.Uuid
-  lastPaymentReminderSentAt DateTime? @map("last_payment_reminder_sent_at")
+  lastPaymentReminderSentAt      DateTime? @map("last_payment_reminder_sent_at")
+  earlyPaymentReminderSentAt     DateTime? @map("early_payment_reminder_sent_at")
   approvedAt         DateTime?     @map("approved_at")
   publicUnitMask     String?       @map("public_unit_mask")
   createdAt          DateTime      @default(now()) @map("created_at")

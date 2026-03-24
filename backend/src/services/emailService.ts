@@ -117,3 +117,36 @@ export async function sendPaymentReminderEmail(prisma: PrismaClient, booking: Bo
     )
   );
 }
+
+export async function sendEarlyPaymentWarningEmail(prisma: PrismaClient, booking: BookingEmailData) {
+  const moveLabel = MOVE_TYPE_LABELS[booking.moveType] ?? booking.moveType;
+  const dateLabel = dayjs(booking.startDatetime).format('MMM D, YYYY');
+  await sendEmail(
+    prisma,
+    booking.residentEmail,
+    `Action Required: Payment Not Yet Received — ${moveLabel} on ${dateLabel}`,
+    emailWrapper(
+      'Payment Required to Confirm Your Booking',
+      'Your booking request has been received, but we have not yet received a payment. <strong>If payment is not received, your booking may be cancelled.</strong> Please arrange payment as soon as possible.',
+      bookingDetailsHtml(booking),
+      'If you have already submitted payment, please disregard this message — confirmation may take a short time to process.'
+    )
+  );
+}
+
+const DCOOK_EMAIL = 'dcook@spectrum4.ca';
+
+export async function sendPaymentConfirmationToDcook(prisma: PrismaClient, booking: BookingEmailData) {
+  const moveLabel = MOVE_TYPE_LABELS[booking.moveType] ?? booking.moveType;
+  const dateLabel = dayjs(booking.startDatetime).format('MMM D, YYYY');
+  await sendEmail(
+    prisma,
+    DCOOK_EMAIL,
+    `Payment Confirmed — ${moveLabel} for Unit ${booking.unit} on ${dateLabel}`,
+    emailWrapper(
+      'Payment Confirmed — Booking Approved',
+      `Payment has been received and the following booking has been confirmed. The resident (<strong>${booking.residentEmail}</strong>) has been notified of their approval.`,
+      bookingDetailsHtml(booking, true, true)
+    )
+  );
+}
