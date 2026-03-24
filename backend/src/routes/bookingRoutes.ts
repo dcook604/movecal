@@ -14,10 +14,53 @@ import { config } from '../config.js';
 import { validateMoveTime } from '../utils/moveTimeValidator.js';
 import { checkAndApproveMoveRequest } from '../services/moveApprovalService.js';
 
+// ── Email / phone validation helpers ──────────────────────────────────
+const COMMON_TLDS = new Set([
+  'com','net','org','edu','gov','mil','int','info','biz','name','pro','aero','coop','museum',
+  'io','co','app','dev','ai','gg','me','tv','fm','ac','cc','xyz','online','site','store',
+  'tech','cloud','digital','media','news','live','shop','web','blog','design','email',
+  'ca','uk','au','nz','us','ie','de','fr','es','it','nl','be','ch','at','se','no','dk',
+  'fi','pl','pt','cz','sk','hu','ro','gr','hr','bg','lt','lv','ee','si','rs','me','mk',
+  'al','ba','by','ua','ru','kz','uz','ge','am','az','md','kg','tj','af','bd','in','pk',
+  'lk','np','mm','kh','th','vn','my','sg','id','ph','jp','cn','tw','kr','hk','mo','mn',
+  'la','bn','bt','mv','cx','gi','im','je','vg','ky','tc','ms','dm','gd','lc','vc','bb',
+  'tt','ag','kn','jm','ht','do','pr','cu','bs','bm','aw','cw','sx','re','yt','nc','pf',
+  'mq','gp','tf','pm','sh','gs','fk','ar','br','cl','ec','pe','uy','ve','mx','gt','hn',
+  'sv','ni','cr','pa','tz','ke','ng','gh','za','eg','ma','dz','tn','ly','sd','et','ug',
+  'rw','mz','zm','zw','bw','na','ls','sz','mw','mg','mu','sc','km','dj','so','er','sa',
+  'ae','qa','kw','bh','om','ye','iq','ir','sy','lb','jo','il','ps','tr','cy','mt','is',
+  'li','lu','mc','sm','va','ad','fo','gl','nu','tk','to','ws','fj','pg','sb','vu','ki',
+  'pw','nr','as','mp','gu','wf','arpa',
+]);
+
+function isValidEmailTld(email: string): boolean {
+  const atIdx = email.lastIndexOf('@');
+  if (atIdx < 0) return false;
+  const domain = email.slice(atIdx + 1).toLowerCase();
+  const dotIdx = domain.lastIndexOf('.');
+  if (dotIdx < 0) return false;
+  const tld = domain.slice(dotIdx + 1);
+  return /^[a-z]+$/.test(tld) && COMMON_TLDS.has(tld);
+}
+
+const BLOCKED_AREA_CODES = new Set(['000', '111', '911']);
+
+function isValidPhonePrefix(phone: string): boolean {
+  const digits = phone.replace(/\D/g, '');
+  if (digits.length < 10) return true; // length check handled separately
+  // Strip leading country code 1 (NANP) if present
+  const ten = digits.length === 11 && digits[0] === '1' ? digits.slice(1) : digits.slice(0, 10);
+  const area = ten.slice(0, 3);
+  if (BLOCKED_AREA_CODES.has(area)) return false;
+  // Reject all-same-digit numbers (e.g. 1111111111)
+  if (/^(\d)\1{9}$/.test(ten)) return false;
+  return true;
+}
+
 const createSchema = z.object({
   residentName: z.string().min(1).max(200),
-  residentEmail: z.string().email().max(320), // RFC 5321 max email length
-  residentPhone: z.string().min(1).max(50),
+  residentEmail: z.string().email().max(320).refine(isValidEmailTld, { message: 'Email domain does not appear to be valid. Please double-check the address.' }), // RFC 5321 max email length
+  residentPhone: z.string().min(1).max(50).refine(isValidPhonePrefix, { message: 'Phone number appears invalid. Please check the area code.' }),
   unit: z.string().min(1).max(20),
   moveType: z.nativeEnum(MoveType),
   companyName: z.string().max(200).optional(),
@@ -236,7 +279,16 @@ export async function bookingRoutes(app: FastifyInstance) {
         status: z.nativeEnum(BookingStatus).optional(),
         startDatetime: z.coerce.date().optional(),
         endDatetime: z.coerce.date().optional(),
-        overrideConflict: z.boolean().optional()
+        overrideConflict: z.boolean().optional(),
+        residentName: z.string().min(1).max(200).optional(),
+        residentEmail: z.string().email().max(320).refine(isValidEmailTld, { message: 'Email domain does not appear to be valid.' }).optional(),
+        residentPhone: z.string().min(1).max(50).refine(isValidPhonePrefix, { message: 'Phone number appears invalid. Please check the area code.' }).optional(),
+        unit: z.string().min(1).max(20).optional(),
+        companyName: z.string().max(200).nullable().optional(),
+        notes: z.string().max(2000).nullable().optional(),
+        moveType: z.nativeEnum(MoveType).optional(),
+        elevatorRequired: z.boolean().optional(),
+        loadingBayRequired: z.boolean().optional(),
       })
       .parse(req.body);
 
@@ -246,11 +298,11 @@ export async function bookingRoutes(app: FastifyInstance) {
     const overrideRoles: UserRole[] = [UserRole.COUNCIL, UserRole.PROPERTY_MANAGER];
     const allowOverride = overrideRoles.includes(user.role) && !!body.overrideConflict;
 
-    // Validate move time restrictions if times are being updated
-    if ((body.startDatetime || body.endDatetime) && !allowOverride) {
+    // Validate move time restrictions if times or move type are being updated
+    if ((body.startDatetime || body.endDatetime || body.moveType) && !allowOverride) {
       const newStart = body.startDatetime ?? existing.startDatetime;
       const newEnd = body.endDatetime ?? existing.endDatetime;
-      const timeValidation = validateMoveTime(newStart, newEnd, existing.moveType);
+      const timeValidation = validateMoveTime(newStart, newEnd, body.moveType ?? existing.moveType);
       if (!timeValidation.valid) {
         return reply.status(400).send({ message: timeValidation.error });
       }
@@ -263,8 +315,8 @@ export async function bookingRoutes(app: FastifyInstance) {
           id: existing.id,
           startDatetime: body.startDatetime ?? existing.startDatetime,
           endDatetime: body.endDatetime ?? existing.endDatetime,
-          elevatorRequired: existing.elevatorRequired,
-          moveType: existing.moveType,
+          elevatorRequired: body.elevatorRequired ?? existing.elevatorRequired,
+          moveType: body.moveType ?? existing.moveType,
         },
         allowOverride
       );
@@ -273,10 +325,18 @@ export async function bookingRoutes(app: FastifyInstance) {
         where: { id: existing.id },
         data: {
           status: body.status ?? existing.status,
-          startDatetime: body.startDatetime ?? undefined,
-          endDatetime: body.endDatetime ?? undefined,
-          approvedById: body.status === BookingStatus.APPROVED ? user.id : undefined,
-          approvedAt: body.status === BookingStatus.APPROVED ? new Date() : undefined
+          ...(body.startDatetime !== undefined && { startDatetime: body.startDatetime, moveDate: body.startDatetime }),
+          ...(body.endDatetime !== undefined && { endDatetime: body.endDatetime }),
+          ...(body.residentName !== undefined && { residentName: body.residentName }),
+          ...(body.residentEmail !== undefined && { residentEmail: body.residentEmail }),
+          ...(body.residentPhone !== undefined && { residentPhone: body.residentPhone }),
+          ...(body.unit !== undefined && { unit: body.unit }),
+          ...(body.companyName !== undefined && { companyName: body.companyName }),
+          ...(body.notes !== undefined && { notes: body.notes }),
+          ...(body.moveType !== undefined && { moveType: body.moveType }),
+          ...(body.elevatorRequired !== undefined && { elevatorRequired: body.elevatorRequired }),
+          ...(body.loadingBayRequired !== undefined && { loadingBayRequired: body.loadingBayRequired }),
+          ...(body.status === BookingStatus.APPROVED && { approvedById: user.id, approvedAt: new Date() }),
         }
       });
     });

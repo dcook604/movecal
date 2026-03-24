@@ -114,6 +114,26 @@ function getSlotsForDateAndType(dateStr: string, moveType: string): Slot[] | nul
 }
 
 // ── Validation helpers ─────────────────────────────────────────
+const COMMON_TLDS = new Set([
+  'com','net','org','edu','gov','mil','int','info','biz','name','pro','aero','coop','museum',
+  'io','co','app','dev','ai','gg','me','tv','fm','ac','cc','xyz','online','site','store',
+  'tech','cloud','digital','media','news','live','shop','web','blog','design','email',
+  'ca','uk','au','nz','us','ie','de','fr','es','it','nl','be','ch','at','se','no','dk',
+  'fi','pl','pt','cz','sk','hu','ro','gr','hr','bg','lt','lv','ee','si','rs','mk','al',
+  'ba','by','ua','ru','kz','uz','ge','am','az','md','kg','tj','af','bd','in','pk','lk',
+  'np','mm','kh','th','vn','my','sg','id','ph','jp','cn','tw','kr','hk','mo','mn','la',
+  'bn','bt','mv','cx','gi','im','je','vg','ky','tc','ms','dm','gd','lc','vc','bb','tt',
+  'ag','kn','jm','ht','do','pr','cu','bs','bm','aw','cw','sx','re','yt','nc','pf','mq',
+  'gp','tf','pm','sh','gs','fk','ar','br','cl','ec','pe','uy','ve','mx','gt','hn','sv',
+  'ni','cr','pa','tz','ke','ng','gh','za','eg','ma','dz','tn','ly','sd','et','ug','rw',
+  'mz','zm','zw','bw','na','ls','sz','mw','mg','mu','sc','km','dj','so','er','sa','ae',
+  'qa','kw','bh','om','ye','iq','ir','sy','lb','jo','il','ps','tr','cy','mt','is','li',
+  'lu','mc','sm','va','ad','fo','gl','nu','tk','to','ws','fj','pg','sb','vu','ki','pw',
+  'nr','as','mp','gu','wf','arpa',
+]);
+
+const BLOCKED_AREA_CODES = new Set(['000', '111', '911']);
+
 function validateName(v: string) {
   if (!v.trim()) return 'Name is required';
   if (v.trim().length < 2) return 'Name must be at least 2 characters';
@@ -122,11 +142,21 @@ function validateName(v: string) {
 function validateEmail(v: string) {
   if (!v.trim()) return 'Email is required';
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim())) return 'Enter a valid email address';
+  const atIdx = v.lastIndexOf('@');
+  const domain = v.slice(atIdx + 1).toLowerCase();
+  const dotIdx = domain.lastIndexOf('.');
+  const tld = dotIdx >= 0 ? domain.slice(dotIdx + 1) : '';
+  if (!COMMON_TLDS.has(tld)) return `Email domain does not appear to be valid (unrecognized extension: .${tld})`;
   return '';
 }
 function validatePhone(v: string) {
   if (!v.trim()) return 'Phone number is required';
-  if (v.replace(/\D/g, '').length < 10) return 'Enter a valid 10-digit phone number';
+  const digits = v.replace(/\D/g, '');
+  if (digits.length < 10) return 'Enter a valid phone number (at least 10 digits)';
+  const ten = digits.length === 11 && digits[0] === '1' ? digits.slice(1) : digits.slice(0, 10);
+  const area = ten.slice(0, 3);
+  if (BLOCKED_AREA_CODES.has(area)) return `Phone number area code (${area}) is not valid`;
+  if (/^(\d)\1{9}$/.test(ten)) return 'Phone number appears invalid';
   return '';
 }
 function validateUnit(v: string) {

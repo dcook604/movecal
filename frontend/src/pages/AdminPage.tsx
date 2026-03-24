@@ -178,6 +178,14 @@ export function AdminPage() {
   const [isQuickSubmitting, setIsQuickSubmitting] = useState(false);
   const [quickTakenRanges, setQuickTakenRanges] = useState<{ start: string; end: string }[]>([]);
 
+  // ── Edit booking modal ────────────────────────────────────────
+  const [editingBookingId, setEditingBookingId] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState<any>({});
+  const [editSlot, setEditSlot] = useState('');
+  const [editError, setEditError] = useState('');
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
+  const [editTakenRanges, setEditTakenRanges] = useState<{ start: string; end: string }[]>([]);
+
   const canManageSettings = role === 'COUNCIL' || role === 'PROPERTY_MANAGER';
 
   const handleAuthError = (error: unknown): boolean => {
@@ -261,6 +269,13 @@ export function AdminPage() {
       .then((res: any) => setQuickTakenRanges(res.data))
       .catch(() => setQuickTakenRanges([]));
   }, [quickForm.moveDate]);
+
+  useEffect(() => {
+    if (!editingBookingId || !editForm.moveDate) { setEditTakenRanges([]); return; }
+    api.get(`/api/public/taken-slots?date=${editForm.moveDate}&excludeId=${editingBookingId}`)
+      .then((res: any) => setEditTakenRanges(res.data))
+      .catch(() => setEditTakenRanges([]));
+  }, [editingBookingId, editForm.moveDate]);
 
   const updateStatus = async (id: string, status: string) => {
     if (!confirm(`Are you sure you want to ${status.toLowerCase()} this booking?`)) return;
@@ -520,6 +535,120 @@ export function AdminPage() {
     }
   };
 
+  // ── Edit booking helpers ──────────────────────────────────────
+  const COMMON_TLDS_ADMIN = new Set([
+    'com','net','org','edu','gov','mil','int','info','biz','name','pro','aero','coop','museum',
+    'io','co','app','dev','ai','gg','me','tv','fm','ac','cc','xyz','online','site','store',
+    'tech','cloud','digital','media','news','live','shop','web','blog','design','email',
+    'ca','uk','au','nz','us','ie','de','fr','es','it','nl','be','ch','at','se','no','dk',
+    'fi','pl','pt','cz','sk','hu','ro','gr','hr','bg','lt','lv','ee','si','rs','mk','al',
+    'ba','by','ua','ru','kz','uz','ge','am','az','md','kg','tj','af','bd','in','pk','lk',
+    'np','mm','kh','th','vn','my','sg','id','ph','jp','cn','tw','kr','hk','mo','mn','la',
+    'bn','bt','mv','cx','gi','im','je','vg','ky','tc','ms','dm','gd','lc','vc','bb','tt',
+    'ag','kn','jm','ht','do','pr','cu','bs','bm','aw','cw','sx','re','yt','nc','pf','mq',
+    'gp','tf','pm','sh','gs','fk','ar','br','cl','ec','pe','uy','ve','mx','gt','hn','sv',
+    'ni','cr','pa','tz','ke','ng','gh','za','eg','ma','dz','tn','ly','sd','et','ug','rw',
+    'mz','zm','zw','bw','na','ls','sz','mw','mg','mu','sc','km','dj','so','er','sa','ae',
+    'qa','kw','bh','om','ye','iq','ir','sy','lb','jo','il','ps','tr','cy','mt','is','li',
+    'lu','mc','sm','va','ad','fo','gl','nu','tk','to','ws','fj','pg','sb','vu','ki','pw',
+    'nr','as','mp','gu','wf','arpa',
+  ]);
+  const BLOCKED_AREA_CODES_ADMIN = new Set(['000', '111', '911']);
+
+  function validateEditEmail(v: string): string {
+    if (!v.trim()) return '';  // email is optional in admin context
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim())) return 'Enter a valid email address';
+    const atIdx = v.lastIndexOf('@');
+    const domain = v.slice(atIdx + 1).toLowerCase();
+    const dotIdx = domain.lastIndexOf('.');
+    const tld = dotIdx >= 0 ? domain.slice(dotIdx + 1) : '';
+    if (!COMMON_TLDS_ADMIN.has(tld)) return `Unrecognized email extension: .${tld}`;
+    return '';
+  }
+
+  function validateEditPhone(v: string): string {
+    if (!v.trim()) return '';  // phone is optional in admin context
+    const digits = v.replace(/\D/g, '');
+    if (digits.length < 10) return 'Phone number must have at least 10 digits';
+    const ten = digits.length === 11 && digits[0] === '1' ? digits.slice(1) : digits.slice(0, 10);
+    const area = ten.slice(0, 3);
+    if (BLOCKED_AREA_CODES_ADMIN.has(area)) return `Area code ${area} is not valid`;
+    if (/^(\d)\1{9}$/.test(ten)) return 'Phone number appears invalid';
+    return '';
+  }
+
+  const openEditBooking = (b: any) => {
+    const dt = new Date(b.startDatetime);
+    const yr = dt.getFullYear();
+    const mo = String(dt.getMonth() + 1).padStart(2, '0');
+    const dy = String(dt.getDate()).padStart(2, '0');
+    const moveDate = `${yr}-${mo}-${dy}`;
+    const hh = String(dt.getHours()).padStart(2, '0');
+    const mm = String(dt.getMinutes()).padStart(2, '0');
+    setEditingBookingId(b.id);
+    setEditForm({
+      residentName: b.residentName ?? '',
+      residentEmail: b.residentEmail ?? '',
+      residentPhone: b.residentPhone ?? '',
+      unit: b.unit ?? '',
+      companyName: b.companyName ?? '',
+      moveType: b.moveType ?? 'MOVE_IN',
+      moveDate,
+      elevatorRequired: !!b.elevatorRequired,
+      loadingBayRequired: !!b.loadingBayRequired,
+      notes: b.notes ?? '',
+    });
+    setEditSlot(`${hh}:${mm}`);
+    setEditError('');
+    setEditTakenRanges([]);
+  };
+
+  const closeEditBooking = () => {
+    setEditingBookingId(null);
+    setEditForm({});
+    setEditSlot('');
+    setEditError('');
+  };
+
+  const saveEditBooking = async () => {
+    const emailErr = validateEditEmail(editForm.residentEmail);
+    if (emailErr) { setEditError(emailErr); return; }
+    const phoneErr = validateEditPhone(editForm.residentPhone);
+    if (phoneErr) { setEditError(phoneErr); return; }
+
+    const slots = getSlotsForDateAndType(editForm.moveDate, editForm.moveType);
+    const selected = slots?.find((s) => s.start === editSlot);
+    if (!selected) { setEditError('Please select a valid time slot.'); return; }
+    const startDatetime = `${editForm.moveDate}T${selected.start}:00`;
+    const endDatetime   = `${editForm.moveDate}T${selected.end}:00`;
+
+    setIsSavingEdit(true);
+    setEditError('');
+    try {
+      await api.patch(`/api/admin/bookings/${editingBookingId}`, {
+        residentName: editForm.residentName,
+        residentEmail: editForm.residentEmail,
+        residentPhone: editForm.residentPhone,
+        unit: editForm.unit,
+        companyName: editForm.companyName || null,
+        moveType: editForm.moveType,
+        startDatetime,
+        endDatetime,
+        elevatorRequired: editForm.elevatorRequired,
+        loadingBayRequired: editForm.loadingBayRequired,
+        notes: editForm.notes || null,
+      });
+      closeEditBooking();
+      await refresh();
+      setActionMessage('Booking updated successfully');
+    } catch (error: any) {
+      if (handleAuthError(error)) return;
+      setEditError(error.response?.data?.message || 'Failed to update booking.');
+    } finally {
+      setIsSavingEdit(false);
+    }
+  };
+
   /* ── Login screen ────────────────────────────────────────── */
   if (!token) {
     return (
@@ -627,6 +756,95 @@ export function AdminPage() {
           </div>
         </div>
       )}
+
+      {/* ── Edit booking modal ── */}
+      {editingBookingId && (() => {
+        const eRawSlots = getSlotsForDateAndType(editForm.moveDate, editForm.moveType);
+        const eIsHoliday = editForm.moveDate && eRawSlots !== null && eRawSlots.length === 0;
+        const eSlots = eRawSlots ? filterAvailableSlots(eRawSlots, editTakenRanges) : eRawSlots;
+        // Ensure the current slot is always in the list (it may have been excluded when date didn't change)
+        const currentSlotInList = eSlots?.some((s) => s.start === editSlot);
+        const allESlots = eSlots && !currentSlotInList && editSlot
+          ? [...(eSlots ?? []), { label: `${editSlot} (current)`, start: editSlot, end: '' }].sort((a, b) => a.start.localeCompare(b.start))
+          : eSlots;
+        return (
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 1000, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '24px 16px', overflowY: 'auto' }}>
+            <div style={{ background: '#fff', borderRadius: '12px', padding: '28px 24px', width: '100%', maxWidth: '560px', boxShadow: '0 20px 40px rgba(0,0,0,0.3)', marginTop: '16px' }}>
+              <h3 style={{ margin: '0 0 20px', fontSize: '1.125rem' }}>Edit Booking</h3>
+              <div className="quick-entry-form-grid">
+                <div className="form-field">
+                  <label>Resident Name</label>
+                  <input value={editForm.residentName} onChange={(e) => setEditForm({ ...editForm, residentName: e.target.value })} placeholder="e.g. Jane Smith" />
+                </div>
+                <div className="form-field">
+                  <label>Unit</label>
+                  <input value={editForm.unit} onChange={(e) => setEditForm({ ...editForm, unit: e.target.value })} placeholder="e.g. 1204" />
+                </div>
+                <div className="form-field">
+                  <label>Resident Email</label>
+                  <input type="email" value={editForm.residentEmail} onChange={(e) => setEditForm({ ...editForm, residentEmail: e.target.value })} placeholder="name@example.com" />
+                </div>
+                <div className="form-field">
+                  <label>Resident Phone</label>
+                  <input value={editForm.residentPhone} onChange={(e) => setEditForm({ ...editForm, residentPhone: e.target.value })} placeholder="e.g. 604-555-1234" />
+                </div>
+                <div className="form-field">
+                  <label>Booking Type</label>
+                  <select value={editForm.moveType} onChange={(e) => { setEditForm({ ...editForm, moveType: e.target.value }); setEditSlot(''); }}>
+                    <option value="MOVE_IN">Move In</option>
+                    <option value="MOVE_OUT">Move Out</option>
+                    <option value="DELIVERY">Delivery</option>
+                    <option value="RENO">Renovation</option>
+                  </select>
+                </div>
+                <div className="form-field">
+                  <label>Date</label>
+                  <input type="date" value={editForm.moveDate} onChange={(e) => { setEditForm({ ...editForm, moveDate: e.target.value }); setEditSlot(''); }} />
+                </div>
+                <div className="form-field">
+                  <label>Time Slot</label>
+                  <select value={editSlot} onChange={(e) => setEditSlot(e.target.value)} disabled={!editForm.moveDate || !!eIsHoliday || allESlots?.length === 0}>
+                    <option value="">
+                      {!editForm.moveDate ? 'Select a date first' : eIsHoliday ? 'No slots on holidays' : allESlots?.length === 0 ? 'No slots available' : 'Select a time slot'}
+                    </option>
+                    {(allESlots ?? []).map((s) => (
+                      <option key={s.start} value={s.start}>{s.label}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="form-field">
+                  <label>Company Name</label>
+                  <input value={editForm.companyName} onChange={(e) => setEditForm({ ...editForm, companyName: e.target.value })} placeholder="e.g. ABC Movers (optional)" />
+                </div>
+              </div>
+              <div className="form-field" style={{ marginTop: '8px' }}>
+                <label>Notes</label>
+                <textarea rows={2} value={editForm.notes} onChange={(e) => setEditForm({ ...editForm, notes: e.target.value })} placeholder="Optional details" />
+              </div>
+              <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', marginTop: '4px' }}>
+                <label className="checkbox-label">
+                  <input type="checkbox" checked={editForm.elevatorRequired} onChange={(e) => setEditForm({ ...editForm, elevatorRequired: e.target.checked })} />
+                  Elevator Required
+                </label>
+                <label className="checkbox-label">
+                  <input type="checkbox" checked={editForm.loadingBayRequired} onChange={(e) => setEditForm({ ...editForm, loadingBayRequired: e.target.checked })} />
+                  Loading Bay Required
+                </label>
+              </div>
+              {eIsHoliday && <p className="error-message" style={{ marginTop: '12px' }}>This date is a statutory holiday — no bookings permitted.</p>}
+              {editError && <p className="error-message" style={{ marginTop: '12px' }}>{editError}</p>}
+              <div style={{ display: 'flex', gap: '10px', marginTop: '20px' }}>
+                <button className="btn-sm btn-green" type="button" onClick={saveEditBooking} disabled={isSavingEdit || !!eIsHoliday}>
+                  {isSavingEdit ? 'Saving…' : 'Save Changes'}
+                </button>
+                <button className="btn-sm btn-slate" type="button" onClick={closeEditBooking} disabled={isSavingEdit}>
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       <div className="admin-title-row">
         <h2>Dashboard</h2>
@@ -758,6 +976,9 @@ export function AdminPage() {
             <div className="booking-actions">
               <button className="btn-sm btn-green" onClick={() => updateStatus(b.id, 'APPROVED')} disabled={isUpdating === b.id}>
                 {isUpdating === b.id ? '…' : 'Approve'}
+              </button>
+              <button className="btn-sm btn-blue" onClick={() => openEditBooking(b)} disabled={isUpdating === b.id}>
+                Edit
               </button>
               <button className="btn-sm btn-red" onClick={() => updateStatus(b.id, 'REJECTED')} disabled={isUpdating === b.id}>
                 {isUpdating === b.id ? '…' : 'Reject'}

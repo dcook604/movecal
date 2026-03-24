@@ -4,7 +4,7 @@ import { prisma } from '../prisma.js';
 
 export async function publicRoutes(app: FastifyInstance) {
   app.get('/api/public/taken-slots', async (req) => {
-    const { date } = req.query as { date?: string };
+    const { date, excludeId } = req.query as { date?: string; excludeId?: string };
     if (!date) return [];
     const dayStart = new Date(`${date}T00:00:00`);
     const dayEnd   = new Date(`${date}T23:59:59`);
@@ -12,6 +12,7 @@ export async function publicRoutes(app: FastifyInstance) {
       where: {
         startDatetime: { gte: dayStart, lte: dayEnd },
         status: { notIn: [BookingStatus.REJECTED, BookingStatus.CANCELLED] },
+        ...(excludeId ? { id: { not: excludeId } } : {}),
       },
       select: { startDatetime: true, endDatetime: true },
     });
