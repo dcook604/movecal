@@ -801,7 +801,7 @@ export function AdminPage() {
                 </div>
                 <div className="form-field">
                   <label>Unit</label>
-                  <input value={editForm.unit} onChange={(e) => setEditForm({ ...editForm, unit: e.target.value })} placeholder="e.g. 1204" />
+                  <input value={editForm.unit} inputMode="numeric" onChange={(e) => setEditForm({ ...editForm, unit: e.target.value.replace(/\D/g, '') })} placeholder="e.g. 1204" />
                 </div>
                 <div className="form-field">
                   <label>Resident Email</label>
@@ -1054,7 +1054,8 @@ export function AdminPage() {
                     <div className="form-field">
                       <label htmlFor="qe-unit" className="required">Unit</label>
                       <input id="qe-unit" value={quickForm.unit}
-                        onChange={(e) => setQuickForm({ ...quickForm, unit: e.target.value })}
+                        inputMode="numeric"
+                        onChange={(e) => setQuickForm({ ...quickForm, unit: e.target.value.replace(/\D/g, '') })}
                         placeholder="e.g. 1204" required />
                     </div>
                     <div className="form-field">

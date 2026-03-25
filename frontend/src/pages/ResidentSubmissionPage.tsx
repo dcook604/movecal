@@ -399,8 +399,9 @@ export function ResidentSubmissionPage() {
               <label htmlFor="unit" className="required">Unit</label>
               <input id="unit" placeholder="e.g. 1204"
                 className={fieldErrors.unit ? 'input-error' : ''}
+                inputMode="numeric"
                 value={form.unit ?? ''}
-                onChange={(e) => handleFieldChange('unit', e.target.value)}
+                onChange={(e) => handleFieldChange('unit', e.target.value.replace(/\D/g, ''))}
                 onBlur={(e) => handleBlur('unit', e.target.value)} />
               {fieldErrors.unit && <span className="field-error">{fieldErrors.unit}</span>}
             </div>
