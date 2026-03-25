@@ -8,7 +8,7 @@ import { nanoid } from 'nanoid';
 import { prisma } from '../prisma.js';
 import { assertNoConflict } from '../services/conflictService.js';
 import { requireAuth, requireRole } from '../middleware/auth.js';
-import { sendEmail, sendNotificationRecipients, bookingDetailsHtml, emailWrapper, sendPaymentConfirmationToDcook } from '../services/emailService.js';
+import { sendEmail, sendNotificationRecipients, bookingDetailsHtml, emailWrapper, sendPaymentConfirmationToDcook, sendPaymentReminderEmail } from '../services/emailService.js';
 import { logAudit } from '../services/auditService.js';
 import { config } from '../config.js';
 import { validateMoveTime } from '../utils/moveTimeValidator.js';
@@ -437,6 +437,38 @@ export async function bookingRoutes(app: FastifyInstance) {
     });
 
     return { message: 'Booking deleted successfully' };
+  });
+
+  app.post('/api/admin/bookings/:id/payment-due-reminder', { preHandler: [requireRole([UserRole.CONCIERGE, UserRole.COUNCIL, UserRole.PROPERTY_MANAGER])] }, async (req, reply) => {
+    const bookingId = uuidSchema.parse((req.params as { id: string }).id);
+    const booking = await prisma.booking.findUniqueOrThrow({ where: { id: bookingId } });
+
+    if (booking.status === BookingStatus.APPROVED) {
+      return reply.status(400).send({ error: 'Booking is already approved — payment was confirmed.' });
+    }
+    if (!booking.residentEmail) {
+      return reply.status(400).send({ error: 'Booking has no resident email address.' });
+    }
+
+    await sendPaymentReminderEmail(prisma, {
+      id: booking.id,
+      residentName: booking.residentName,
+      residentEmail: booking.residentEmail,
+      residentPhone: booking.residentPhone ?? '',
+      unit: booking.unit,
+      moveType: booking.moveType,
+      companyName: booking.companyName,
+      startDatetime: booking.startDatetime,
+      endDatetime: booking.endDatetime,
+      elevatorRequired: booking.elevatorRequired,
+      loadingBayRequired: booking.loadingBayRequired,
+      notes: booking.notes,
+    });
+
+    await prisma.booking.update({ where: { id: bookingId }, data: { lastPaymentReminderSentAt: new Date() } });
+    await logAudit(prisma, req.user.id, 'BOOKING_PAYMENT_REMINDER_SENT' as any, bookingId, { residentName: booking.residentName, unit: booking.unit });
+
+    return { message: 'Payment reminder sent.' };
   });
 
   app.post('/api/admin/bookings/:id/documents', { preHandler: [requireRole([UserRole.CONCIERGE, UserRole.COUNCIL, UserRole.PROPERTY_MANAGER])] }, async (req) => {

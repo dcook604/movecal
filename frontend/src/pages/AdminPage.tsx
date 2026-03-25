@@ -310,6 +310,19 @@ export function AdminPage() {
     } finally { setIsUpdating(null); }
   };
 
+  const sendPaymentReminder = async (id: string, residentName: string) => {
+    if (!confirm(`Send a payment due reminder email to ${residentName}?`)) return;
+    setIsUpdating(id);
+    setActionMessage('');
+    try {
+      await api.post(`/api/admin/bookings/${id}/payment-due-reminder`);
+      setActionMessage('Payment reminder sent.');
+    } catch (error: any) {
+      if (handleAuthError(error)) return;
+      setActionMessage(error.response?.data?.error || 'Failed to send payment reminder.');
+    } finally { setIsUpdating(null); }
+  };
+
   const createRecipient = async (e: FormEvent) => {
     e.preventDefault();
     setActionMessage('');
@@ -996,6 +1009,11 @@ export function AdminPage() {
               <button className="btn-sm btn-slate" onClick={() => deleteBooking(b.id, b.residentName)} disabled={isUpdating === b.id}>
                 {isUpdating === b.id ? '…' : 'Delete'}
               </button>
+              {!b.paymentMatched && (b.status === 'SUBMITTED' || b.status === 'PENDING') && (
+                <button className="btn-sm btn-amber" onClick={() => sendPaymentReminder(b.id, b.residentName)} disabled={isUpdating === b.id}>
+                  {isUpdating === b.id ? '…' : 'Notify: Payment Due'}
+                </button>
+              )}
             </div>
           </div>
         );
