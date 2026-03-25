@@ -1011,7 +1011,7 @@ export function AdminPage() {
               </button>
               {!b.paymentMatched && (b.status === 'SUBMITTED' || b.status === 'PENDING') && (
                 <button className="btn-sm btn-amber" onClick={() => sendPaymentReminder(b.id, b.residentName)} disabled={isUpdating === b.id}>
-                  {isUpdating === b.id ? '…' : 'Notify: Payment Due'}
+                  {isUpdating === b.id ? '…' : 'Payment Reminder'}
                 </button>
               )}
             </div>
