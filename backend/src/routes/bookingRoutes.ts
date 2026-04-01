@@ -123,9 +123,19 @@ export async function bookingRoutes(app: FastifyInstance) {
       });
     });
 
+    // Open house bookings are auto-approved immediately (no payment required)
+    let openHouseAutoApproved = false;
+    if (booking.moveType === MoveType.OPEN_HOUSE) {
+      await prisma.booking.update({
+        where: { id: booking.id },
+        data: { status: BookingStatus.APPROVED, approvedAt: new Date() },
+      });
+      openHouseAutoApproved = true;
+    }
+
     // Check if payment already exists for this booking (payment-first flow)
     let paymentConfirmed = false;
-    if (booking.moveType === MoveType.MOVE_IN || booking.moveType === MoveType.MOVE_OUT) {
+    if (!openHouseAutoApproved && (booking.moveType === MoveType.MOVE_IN || booking.moveType === MoveType.MOVE_OUT)) {
       const billingPeriod = dayjs(booking.moveDate).format('YYYY-MM');
       const feeType = booking.moveType === MoveType.MOVE_IN ? 'move_in' : 'move_out';
       const approvalResult = await checkAndApproveMoveRequest({
@@ -143,7 +153,34 @@ export async function bookingRoutes(app: FastifyInstance) {
     const moveTypeLabel = { MOVE_IN: 'Move In', MOVE_OUT: 'Move Out', DELIVERY: 'Delivery', RENO: 'Renovation', OPEN_HOUSE: 'Open House' }[booking.moveType] ?? booking.moveType;
     const dateLabel = dayjs(booking.startDatetime).format('MMM D, YYYY');
 
-    if (paymentConfirmed) {
+    if (openHouseAutoApproved) {
+      // Open house bookings are auto-approved — no payment needed
+      await sendNotificationRecipients(
+        prisma,
+        NotifyEvent.APPROVED,
+        `Booking Auto-Approved — ${moveTypeLabel} for Unit ${booking.unit}`,
+        emailWrapper(
+          'Booking Auto-Approved',
+          'An open house booking has been automatically approved.',
+          bookingDetailsHtml(booking, true, true)
+        )
+      ).catch((err) => {
+        app.log.error({ err, bookingId: booking.id, event: 'APPROVED' }, 'Failed to send open house auto-approval notification email');
+      });
+
+      await sendEmail(
+        prisma,
+        body.residentEmail,
+        `Booking Approved — ${moveTypeLabel} on ${dateLabel}`,
+        emailWrapper(
+          'Booking Approved',
+          'Your open house booking has been automatically approved.',
+          bookingDetailsHtml(booking, false, true)
+        )
+      ).catch((err) => {
+        app.log.error({ err, bookingId: booking.id, email: body.residentEmail }, 'Failed to send open house auto-approval email');
+      });
+    } else if (paymentConfirmed) {
       // Booking was auto-approved — send approval emails, not a pending-review email
       await sendNotificationRecipients(
         prisma,
