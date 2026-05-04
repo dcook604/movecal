@@ -8,14 +8,14 @@ import dayjs from 'dayjs';
 type Slot = { label: string; start: string; end: string };
 
 const MOVE_WEEKDAY_SLOTS: Slot[] = [
-  { label: '10:00 AM – 1:00 PM', start: '10:00', end: '13:00' },
-  { label: '1:00 PM – 4:00 PM',  start: '13:00', end: '16:00' },
+  { label: '9:00 AM – 1:00 PM',  start: '09:00', end: '13:00' },
+  { label: '1:00 PM – 5:00 PM',  start: '13:00', end: '17:00' },
 ];
 
 const MOVE_WEEKEND_SLOTS: Slot[] = [
-  { label: '8:00 AM – 11:00 AM', start: '08:00', end: '11:00' },
-  { label: '11:00 AM – 2:00 PM', start: '11:00', end: '14:00' },
-  { label: '2:00 PM – 5:00 PM',  start: '14:00', end: '17:00' },
+  { label: '8:00 AM – 12:00 PM', start: '08:00', end: '12:00' },
+  { label: '12:00 PM – 4:00 PM', start: '12:00', end: '16:00' },
+  { label: '4:00 PM – 8:00 PM',  start: '16:00', end: '20:00' },
 ];
 
 const STATUTORY_HOLIDAYS = new Set([
@@ -816,6 +816,7 @@ export function AdminPage() {
                   <select value={editForm.moveType} onChange={(e) => { setEditForm({ ...editForm, moveType: e.target.value }); setEditSlot(''); }}>
                     <option value="MOVE_IN">Move In</option>
                     <option value="MOVE_OUT">Move Out</option>
+                    <option value="FURNISHED_MOVE">Furnished Move</option>
                     <option value="DELIVERY">Delivery</option>
                     <option value="RENO">Renovation</option>
                   </select>
@@ -961,7 +962,7 @@ export function AdminPage() {
         const qIsHoliday = quickForm.moveDate && qRawSlots !== null && qRawSlots.length === 0;
         const qSlots = qRawSlots ? filterAvailableSlots(qRawSlots, quickTakenRanges) : qRawSlots;
 
-        const moveTypeLabel = (t: string) => ({ MOVE_IN: 'Move In', MOVE_OUT: 'Move Out', DELIVERY: 'Delivery', RENO: 'Renovation' }[t] ?? t);
+        const moveTypeLabel = (t: string) => ({ MOVE_IN: 'Move In', MOVE_OUT: 'Move Out', DELIVERY: 'Delivery', RENO: 'Renovation', FURNISHED_MOVE: 'Furnished Move' }[t] ?? t);
         const fmtDate = (iso: string) => new Date(iso).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
         const fmtTime = (iso: string) => new Date(iso).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit', timeZone: 'UTC' });
 
@@ -1064,6 +1065,7 @@ export function AdminPage() {
                         onChange={(e) => { setQuickForm({ ...quickForm, moveType: e.target.value }); setQuickSlot(''); }}>
                         <option value="MOVE_IN">Move In</option>
                         <option value="MOVE_OUT">Move Out</option>
+                        <option value="FURNISHED_MOVE">Furnished Move</option>
                         <option value="DELIVERY">Delivery</option>
                         <option value="RENO">Renovation</option>
                       </select>

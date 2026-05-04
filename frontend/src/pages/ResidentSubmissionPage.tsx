@@ -6,16 +6,16 @@ import '../styles/resident.css';
 // ── Time slot definitions ─────────────────────────────────────
 type Slot = { label: string; start: string; end: string };
 
-// Fixed 3-hour slots for MOVE_IN / MOVE_OUT
+// Fixed 4-hour slots for MOVE_IN / MOVE_OUT / FURNISHED_MOVE
 const MOVE_WEEKDAY_SLOTS: Slot[] = [
-  { label: '10:00 AM – 1:00 PM', start: '10:00', end: '13:00' },
-  { label: '1:00 PM – 4:00 PM',  start: '13:00', end: '16:00' },
+  { label: '9:00 AM – 1:00 PM',  start: '09:00', end: '13:00' },
+  { label: '1:00 PM – 5:00 PM',  start: '13:00', end: '17:00' },
 ];
 
 const MOVE_WEEKEND_SLOTS: Slot[] = [
-  { label: '8:00 AM – 11:00 AM', start: '08:00', end: '11:00' },
-  { label: '11:00 AM – 2:00 PM', start: '11:00', end: '14:00' },
-  { label: '2:00 PM – 5:00 PM',  start: '14:00', end: '17:00' },
+  { label: '8:00 AM – 12:00 PM', start: '08:00', end: '12:00' },
+  { label: '12:00 PM – 4:00 PM', start: '12:00', end: '16:00' },
+  { label: '4:00 PM – 8:00 PM',  start: '16:00', end: '20:00' },
 ];
 
 // Fixed slot for OPEN_HOUSE (weekends only)
@@ -109,7 +109,7 @@ function getSlotsForDateAndType(dateStr: string, moveType: string): Slot[] | nul
     return generateTimeSlots(rangeStart, rangeEnd, 60);
   }
 
-  // MOVE_IN / MOVE_OUT: fixed half-day slots
+  // MOVE_IN / MOVE_OUT / FURNISHED_MOVE: fixed 4-hour slots
   return isWeekend ? MOVE_WEEKEND_SLOTS : MOVE_WEEKDAY_SLOTS;
 }
 
@@ -344,16 +344,16 @@ export function ResidentSubmissionPage() {
               <div>
                 <strong>Monday – Friday</strong>
                 <ul className="move-times-list">
-                  <li>10:00 AM – 1:00 PM</li>
-                  <li>1:00 PM – 4:00 PM</li>
+                  <li>9:00 AM – 1:00 PM</li>
+                  <li>1:00 PM – 5:00 PM</li>
                 </ul>
               </div>
               <div>
                 <strong>Saturday &amp; Sunday</strong>
                 <ul className="move-times-list">
-                  <li>8:00 AM – 11:00 AM</li>
-                  <li>11:00 AM – 2:00 PM</li>
-                  <li>2:00 PM – 5:00 PM</li>
+                  <li>8:00 AM – 12:00 PM</li>
+                  <li>12:00 PM – 4:00 PM</li>
+                  <li>4:00 PM – 8:00 PM</li>
                 </ul>
               </div>
             </div>
@@ -416,6 +416,7 @@ export function ResidentSubmissionPage() {
                 onChange={(e) => handleMoveTypeChange(e.target.value)}>
                 <option value="MOVE_IN">Move In</option>
                 <option value="MOVE_OUT">Move Out</option>
+                <option value="FURNISHED_MOVE">Furnished Move</option>
                 <option value="DELIVERY">Delivery</option>
                 <option value="RENO">Renovation</option>
                 <option value="OPEN_HOUSE">Open House</option>

@@ -14,6 +14,7 @@ type PublicBooking = {
 const TYPE_LABELS: Record<string, string> = {
   MOVE_IN: 'Move In',
   MOVE_OUT: 'Move Out',
+  FURNISHED_MOVE: 'Furnished Move',
   DELIVERY: 'Delivery',
   RENO: 'Renovation',
 };
@@ -26,6 +27,7 @@ const wall = (dt: string) => new Date(dt.replace('Z', ''));
 const TYPE_CLASS: Record<string, string> = {
   MOVE_IN: 'move-in',
   MOVE_OUT: 'move-out',
+  FURNISHED_MOVE: 'furnished-move',
   DELIVERY: 'delivery',
   RENO: 'reno',
 };

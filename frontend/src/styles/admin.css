@@ -313,10 +313,11 @@
   letter-spacing: 0.05em;
   flex-shrink: 0;
 }
-.move-type-chip--move_in   { background: #d1fae5; color: #065f46; }
-.move-type-chip--move_out  { background: #dbeafe; color: #1e40af; }
-.move-type-chip--delivery  { background: #ede9fe; color: #5b21b6; }
-.move-type-chip--reno      { background: #fce7f3; color: #9d174d; }
+.move-type-chip--move_in         { background: #d1fae5; color: #065f46; }
+.move-type-chip--move_out        { background: #dbeafe; color: #1e40af; }
+.move-type-chip--furnished_move  { background: #fef08a; color: #854d0e; }
+.move-type-chip--delivery        { background: #ede9fe; color: #5b21b6; }
+.move-type-chip--reno            { background: #fce7f3; color: #9d174d; }
 
 .booking-name { font-weight: 600; color: #0f172a; font-size: 0.9375rem; }
 .booking-meta { font-size: 0.8125rem; color: #475569; }

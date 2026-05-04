@@ -19,6 +19,7 @@ enum MoveType {
   DELIVERY
   RENO
   OPEN_HOUSE
+  FURNISHED_MOVE
 }
 
 enum BookingStatus {

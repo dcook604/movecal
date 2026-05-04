@@ -1,0 +1,2 @@
+-- Add FURNISHED_MOVE value to MoveType enum
+ALTER TYPE "MoveType" ADD VALUE IF NOT EXISTS 'FURNISHED_MOVE';

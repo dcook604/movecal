@@ -31,7 +31,7 @@ export async function runAutoApproval() {
         }
       });
 
-      const moveLabel = { MOVE_IN: 'Move In', MOVE_OUT: 'Move Out', DELIVERY: 'Delivery', RENO: 'Renovation', OPEN_HOUSE: 'Open House' }[booking.moveType] ?? booking.moveType;
+      const moveLabel = { MOVE_IN: 'Move In', MOVE_OUT: 'Move Out', DELIVERY: 'Delivery', RENO: 'Renovation', OPEN_HOUSE: 'Open House', FURNISHED_MOVE: 'Furnished Move' }[booking.moveType] ?? booking.moveType;
       const autoSubject = `Booking Approved — ${moveLabel} on ${dayjs(booking.startDatetime).format('MMM D, YYYY')}`;
 
       await sendEmail(
