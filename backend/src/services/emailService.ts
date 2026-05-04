@@ -8,6 +8,7 @@ import { decrypt } from '../utils/crypto.js';
 const MOVE_TYPE_LABELS: Record<MoveType, string> = {
   MOVE_IN: 'Move In',
   MOVE_OUT: 'Move Out',
+  FURNISHED_MOVE: 'Furnished Move',
   DELIVERY: 'Delivery',
   RENO: 'Renovation',
   OPEN_HOUSE: 'Open House',
