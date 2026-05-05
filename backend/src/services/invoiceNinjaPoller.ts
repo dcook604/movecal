@@ -13,16 +13,18 @@ let lastPollAt: Date | null = null;
 
 // ── Fee-type classification ────────────────────────────────────────
 
-function classifyFeeType(productKey: string, notes: string): 'move_in' | 'move_out' | 'delivery' | 'reno' | null {
+function classifyFeeType(productKey: string, notes: string): 'move_in' | 'move_out' | 'delivery' | 'reno' | 'suitcase_move' | null {
   const normalized = (productKey + ' ' + notes).toLowerCase().replace(/[^a-z0-9 ]/g, ' ');
-  const deliveryPattern = /\b(deliver(?:y|ies|ed)?)\b/;
-  const renoPattern     = /\b(reno|renovation|renovate)\b/;
-  const moveInPattern   = /\b(move in|moving in|movein|move-in|into)\b/;
-  const moveOutPattern  = /\b(move out|moving out|moveout|move-out|out|exit|vacate)\b/;
-  if (deliveryPattern.test(normalized)) return 'delivery';
-  if (renoPattern.test(normalized))     return 'reno';
-  if (moveInPattern.test(normalized))   return 'move_in';
-  if (moveOutPattern.test(normalized))  return 'move_out';
+  const deliveryPattern    = /\b(deliver(?:y|ies|ed)?)\b/;
+  const renoPattern        = /\b(reno|renovation|renovate)\b/;
+  const moveInPattern      = /\b(move in|moving in|movein|move-in|into)\b/;
+  const moveOutPattern     = /\b(move out|moving out|moveout|move-out|out|exit|vacate)\b/;
+  const suitcaseMovePattern = /\b(suitcase|suitcase move|suitcase-move)\b/;
+  if (deliveryPattern.test(normalized))    return 'delivery';
+  if (renoPattern.test(normalized))        return 'reno';
+  if (moveInPattern.test(normalized))      return 'move_in';
+  if (moveOutPattern.test(normalized))     return 'move_out';
+  if (suitcaseMovePattern.test(normalized)) return 'suitcase_move';
   return null;
 }
 
@@ -31,6 +33,7 @@ function feeTypeToMoveType(feeType: string): MoveType | null {
   if (feeType === 'move_out')  return MoveType.MOVE_OUT;
   if (feeType === 'delivery')  return MoveType.DELIVERY;
   if (feeType === 'reno')      return MoveType.RENO;
+  if (feeType === 'suitcase_move') return MoveType.SUITCASE_MOVE;
   return null;
 }
 

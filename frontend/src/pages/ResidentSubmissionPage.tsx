@@ -109,6 +109,11 @@ function getSlotsForDateAndType(dateStr: string, moveType: string): Slot[] | nul
     return generateTimeSlots(rangeStart, rangeEnd, 60);
   }
 
+  if (moveType === 'SUITCASE_MOVE') {
+    const [rangeStart, rangeEnd] = isWeekend ? [8 * 60, 20 * 60] : [9 * 60, 17 * 60];
+    return generateTimeSlots(rangeStart, rangeEnd, 60);
+  }
+
   // MOVE_IN / MOVE_OUT / FURNISHED_MOVE: fixed 4-hour slots
   return isWeekend ? MOVE_WEEKEND_SLOTS : MOVE_WEEKDAY_SLOTS;
 }
@@ -308,6 +313,7 @@ export function ResidentSubmissionPage() {
 
   const isDeliveryOrReno = form.moveType === 'DELIVERY' || form.moveType === 'RENO';
   const isOpenHouseType = form.moveType === 'OPEN_HOUSE';
+  const isSuitcaseMove = form.moveType === 'SUITCASE_MOVE';
   const blockLabel = form.moveType === 'DELIVERY' ? '30-minute blocks' : '1-hour slots';
 
   return (
@@ -337,6 +343,26 @@ export function ResidentSubmissionPage() {
                 <strong>Saturday &amp; Sunday</strong>
                 <p style={{ margin: '4px 0 2px' }}>8:00 AM – 5:00 PM</p>
                 <small>{blockLabel}</small>
+              </div>
+            </div>
+          ) : isSuitcaseMove ? (
+            <div className="move-times-grid">
+              <div>
+                <strong>Monday – Friday</strong>
+                <ul className="move-times-list">
+                  <li>9:00 AM – 1:00 PM</li>
+                  <li>1:00 PM – 5:00 PM</li>
+                </ul>
+                <small>1-hour slots</small>
+              </div>
+              <div>
+                <strong>Saturday &amp; Sunday</strong>
+                <ul className="move-times-list">
+                  <li>8:00 AM – 12:00 PM</li>
+                  <li>12:00 PM – 4:00 PM</li>
+                  <li>4:00 PM – 8:00 PM</li>
+                </ul>
+                <small>1-hour slots</small>
               </div>
             </div>
           ) : (
@@ -417,6 +443,7 @@ export function ResidentSubmissionPage() {
                 <option value="MOVE_IN">Move In</option>
                 <option value="MOVE_OUT">Move Out</option>
                 <option value="FURNISHED_MOVE">Furnished Move</option>
+                <option value="SUITCASE_MOVE">Suitcase Move ($50)</option>
                 <option value="DELIVERY">Delivery</option>
                 <option value="RENO">Renovation</option>
                 <option value="OPEN_HOUSE">Open House</option>

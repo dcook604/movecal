@@ -135,9 +135,9 @@ export async function bookingRoutes(app: FastifyInstance) {
 
     // Check if payment already exists for this booking (payment-first flow)
     let paymentConfirmed = false;
-    if (!openHouseAutoApproved && (booking.moveType === MoveType.MOVE_IN || booking.moveType === MoveType.MOVE_OUT || booking.moveType === MoveType.FURNISHED_MOVE)) {
+    if (!openHouseAutoApproved && (booking.moveType === MoveType.MOVE_IN || booking.moveType === MoveType.MOVE_OUT || booking.moveType === MoveType.FURNISHED_MOVE || booking.moveType === MoveType.SUITCASE_MOVE)) {
       const billingPeriod = dayjs(booking.moveDate).format('YYYY-MM');
-      const feeType = booking.moveType === MoveType.MOVE_IN ? 'move_in' : booking.moveType === MoveType.FURNISHED_MOVE ? 'furnished_move' : 'move_out';
+      const feeType = booking.moveType === MoveType.MOVE_IN ? 'move_in' : booking.moveType === MoveType.FURNISHED_MOVE ? 'furnished_move' : booking.moveType === MoveType.SUITCASE_MOVE ? 'suitcase_move' : 'move_out';
       const approvalResult = await checkAndApproveMoveRequest({
         unit: booking.unit,
         feeType,
@@ -150,7 +150,7 @@ export async function bookingRoutes(app: FastifyInstance) {
       paymentConfirmed = approvalResult.approved;
     }
 
-    const moveTypeLabel = { MOVE_IN: 'Move In', MOVE_OUT: 'Move Out', DELIVERY: 'Delivery', RENO: 'Renovation', OPEN_HOUSE: 'Open House', FURNISHED_MOVE: 'Furnished Move' }[booking.moveType] ?? booking.moveType;
+    const moveTypeLabel = { MOVE_IN: 'Move In', MOVE_OUT: 'Move Out', DELIVERY: 'Delivery', RENO: 'Renovation', OPEN_HOUSE: 'Open House', FURNISHED_MOVE: 'Furnished Move', SUITCASE_MOVE: 'Suitcase Move' }[booking.moveType] ?? booking.moveType;
     const dateLabel = dayjs(booking.startDatetime).format('MMM D, YYYY');
 
     if (openHouseAutoApproved) {
@@ -387,7 +387,7 @@ export async function bookingRoutes(app: FastifyInstance) {
       ]);
       const includeContact = !!settings?.includeResidentContactInApprovalEmails;
       const paymentConfirmed = !!moveApproval;
-      const approvedMoveLabel = { MOVE_IN: 'Move In', MOVE_OUT: 'Move Out', DELIVERY: 'Delivery', RENO: 'Renovation', OPEN_HOUSE: 'Open House', FURNISHED_MOVE: 'Furnished Move' }[updated.moveType] ?? updated.moveType;
+      const approvedMoveLabel = { MOVE_IN: 'Move In', MOVE_OUT: 'Move Out', DELIVERY: 'Delivery', RENO: 'Renovation', OPEN_HOUSE: 'Open House', FURNISHED_MOVE: 'Furnished Move', SUITCASE_MOVE: 'Suitcase Move' }[updated.moveType] ?? updated.moveType;
       const approvedSubject = `Booking Approved — ${approvedMoveLabel} on ${dayjs(updated.startDatetime).format('MMM D, YYYY')}`;
 
       await sendEmail(
@@ -420,7 +420,7 @@ export async function bookingRoutes(app: FastifyInstance) {
     }
 
     if (body.status === BookingStatus.REJECTED) {
-      const rejectedMoveLabel = { MOVE_IN: 'Move In', MOVE_OUT: 'Move Out', DELIVERY: 'Delivery', RENO: 'Renovation', OPEN_HOUSE: 'Open House', FURNISHED_MOVE: 'Furnished Move' }[updated.moveType] ?? updated.moveType;
+      const rejectedMoveLabel = { MOVE_IN: 'Move In', MOVE_OUT: 'Move Out', DELIVERY: 'Delivery', RENO: 'Renovation', OPEN_HOUSE: 'Open House', FURNISHED_MOVE: 'Furnished Move', SUITCASE_MOVE: 'Suitcase Move' }[updated.moveType] ?? updated.moveType;
       const rejectedSubject = `Booking Not Approved — ${rejectedMoveLabel} on ${dayjs(updated.startDatetime).format('MMM D, YYYY')}`;
 
       await sendEmail(

@@ -15,6 +15,7 @@ const TYPE_LABELS: Record<string, string> = {
   MOVE_IN: 'Move In',
   MOVE_OUT: 'Move Out',
   FURNISHED_MOVE: 'Furnished Move',
+  SUITCASE_MOVE: 'Suitcase Move',
   DELIVERY: 'Delivery',
   RENO: 'Renovation',
 };
@@ -28,6 +29,7 @@ const TYPE_CLASS: Record<string, string> = {
   MOVE_IN: 'move-in',
   MOVE_OUT: 'move-out',
   FURNISHED_MOVE: 'furnished-move',
+  SUITCASE_MOVE: 'suitcase-move',
   DELIVERY: 'delivery',
   RENO: 'reno',
 };

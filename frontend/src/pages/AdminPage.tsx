@@ -78,6 +78,10 @@ function getSlotsForDateAndType(dateStr: string, moveType: string): Slot[] | nul
     const [rangeStart, rangeEnd] = isWeekend ? [8 * 60, 17 * 60] : [10 * 60, 16 * 60];
     return generateTimeSlots(rangeStart, rangeEnd, 60);
   }
+  if (moveType === 'SUITCASE_MOVE') {
+    const [rangeStart, rangeEnd] = isWeekend ? [8 * 60, 20 * 60] : [9 * 60, 17 * 60];
+    return generateTimeSlots(rangeStart, rangeEnd, 60);
+  }
   return isWeekend ? MOVE_WEEKEND_SLOTS : MOVE_WEEKDAY_SLOTS;
 }
 
@@ -817,6 +821,7 @@ export function AdminPage() {
                     <option value="MOVE_IN">Move In</option>
                     <option value="MOVE_OUT">Move Out</option>
                     <option value="FURNISHED_MOVE">Furnished Move</option>
+                    <option value="SUITCASE_MOVE">Suitcase Move ($50)</option>
                     <option value="DELIVERY">Delivery</option>
                     <option value="RENO">Renovation</option>
                   </select>
@@ -962,7 +967,7 @@ export function AdminPage() {
         const qIsHoliday = quickForm.moveDate && qRawSlots !== null && qRawSlots.length === 0;
         const qSlots = qRawSlots ? filterAvailableSlots(qRawSlots, quickTakenRanges) : qRawSlots;
 
-        const moveTypeLabel = (t: string) => ({ MOVE_IN: 'Move In', MOVE_OUT: 'Move Out', DELIVERY: 'Delivery', RENO: 'Renovation', FURNISHED_MOVE: 'Furnished Move' }[t] ?? t);
+        const moveTypeLabel = (t: string) => ({ MOVE_IN: 'Move In', MOVE_OUT: 'Move Out', DELIVERY: 'Delivery', RENO: 'Renovation', FURNISHED_MOVE: 'Furnished Move', SUITCASE_MOVE: 'Suitcase Move' }[t] ?? t);
         const fmtDate = (iso: string) => new Date(iso).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
         const fmtTime = (iso: string) => new Date(iso).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit', timeZone: 'UTC' });
 
@@ -1066,6 +1071,7 @@ export function AdminPage() {
                         <option value="MOVE_IN">Move In</option>
                         <option value="MOVE_OUT">Move Out</option>
                         <option value="FURNISHED_MOVE">Furnished Move</option>
+                        <option value="SUITCASE_MOVE">Suitcase Move ($50)</option>
                         <option value="DELIVERY">Delivery</option>
                         <option value="RENO">Renovation</option>
                       </select>

@@ -1,0 +1,2 @@
+-- Add SUITCASE_MOVE value to MoveType enum
+ALTER TYPE "MoveType" ADD VALUE IF NOT EXISTS 'SUITCASE_MOVE';

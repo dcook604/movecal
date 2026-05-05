@@ -73,6 +73,7 @@ export function PublicCalendarPage() {
           MOVE_IN: 'Move In',
           MOVE_OUT: 'Move Out',
           FURNISHED_MOVE: 'Furnished Move',
+          SUITCASE_MOVE: 'Suitcase Move',
           DELIVERY: 'Delivery',
           RENO: 'Renovation',
         };
@@ -133,6 +134,7 @@ export function PublicCalendarPage() {
       MOVE_IN:        { bg: '#dbeafe', border: '#3b82f6' },
       MOVE_OUT:       { bg: '#fce7f3', border: '#ec4899' },
       FURNISHED_MOVE: { bg: '#ede9fe', border: '#8b5cf6' },
+      SUITCASE_MOVE:  { bg: '#ffedd5', border: '#f97316' },
       DELIVERY:       { bg: '#d1fae5', border: '#10b981' },
       RENO:           { bg: '#fef3c7', border: '#f59e0b' },
     };
@@ -231,6 +233,7 @@ export function PublicCalendarPage() {
           <div className="legend-item"><span className="legend-dot move-in"></span><span>Move In</span></div>
           <div className="legend-item"><span className="legend-dot move-out"></span><span>Move Out</span></div>
           <div className="legend-item"><span className="legend-dot furnished-move"></span><span>Furnished Move</span></div>
+          <div className="legend-item"><span className="legend-dot suitcase-move"></span><span>Suitcase Move</span></div>
           <div className="legend-item"><span className="legend-dot delivery"></span><span>Delivery</span></div>
           <div className="legend-item"><span className="legend-dot reno"></span><span>Renovation</span></div>
         </div>
@@ -268,7 +271,7 @@ export function PublicCalendarPage() {
             {upcomingEvents.map((event, idx) => {
               const resource = event.resource as any;
               const typeColors: Record<string, string> = {
-                MOVE_IN: 'move-in', MOVE_OUT: 'move-out', FURNISHED_MOVE: 'furnished-move', DELIVERY: 'delivery', RENO: 'reno',
+                MOVE_IN: 'move-in', MOVE_OUT: 'move-out', FURNISHED_MOVE: 'furnished-move', SUITCASE_MOVE: 'suitcase-move', DELIVERY: 'delivery', RENO: 'reno',
               };
               const colorClass = typeColors[resource.moveType] || 'default';
               return (

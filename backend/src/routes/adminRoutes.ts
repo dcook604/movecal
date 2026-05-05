@@ -230,6 +230,7 @@ export async function adminRoutes(app: FastifyInstance) {
       const moveTypeMap: Record<string, typeof MoveType[keyof typeof MoveType]> = {
         move_in: MoveType.MOVE_IN, move_out: MoveType.MOVE_OUT,
         delivery: MoveType.DELIVERY, reno: MoveType.RENO,
+        suitcase_move: MoveType.SUITCASE_MOVE,
       };
       const moveTypeFilter = moveTypeMap[payment.feeType];
       if (!moveTypeFilter) continue;
@@ -328,7 +329,7 @@ export async function adminRoutes(app: FastifyInstance) {
 
   app.patch('/api/admin/payments-ledger/:id/fee-type', { preHandler: [requireRole([UserRole.COUNCIL, UserRole.PROPERTY_MANAGER])] }, async (req, reply) => {
     const id = z.string().uuid().parse((req.params as { id: string }).id);
-    const { feeType } = z.object({ feeType: z.enum(['move_in', 'move_out', 'delivery', 'reno']) }).parse(req.body);
+    const { feeType } = z.object({ feeType: z.enum(['move_in', 'move_out', 'delivery', 'reno', 'suitcase_move']) }).parse(req.body);
 
     const payment = await prisma.paymentsLedger.findUnique({ where: { id } });
     if (!payment) return reply.status(404).send({ message: 'Payment not found' });
@@ -342,6 +343,7 @@ export async function adminRoutes(app: FastifyInstance) {
       const moveTypeMap: Record<string, typeof MoveType[keyof typeof MoveType]> = {
         move_in: MoveType.MOVE_IN, move_out: MoveType.MOVE_OUT,
         delivery: MoveType.DELIVERY, reno: MoveType.RENO,
+        suitcase_move: MoveType.SUITCASE_MOVE,
       };
       const moveTypeFilter = moveTypeMap[feeType];
 

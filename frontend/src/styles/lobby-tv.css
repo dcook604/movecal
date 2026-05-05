@@ -13,6 +13,7 @@
   --tv-move-in:         #60a5fa;
   --tv-move-out:        #f472b6;
   --tv-furnished-move:  #a78bfa;
+  --tv-suitcase-move:   #fb923c;
   --tv-delivery:        #34d399;
   --tv-reno:            #fbbf24;
 
@@ -113,6 +114,7 @@
 .tv-today-card.move-in         { border-left-color: var(--tv-move-in);  }
 .tv-today-card.move-out        { border-left-color: var(--tv-move-out); }
 .tv-today-card.furnished-move  { border-left-color: var(--tv-furnished-move); }
+.tv-today-card.suitcase-move   { border-left-color: var(--tv-suitcase-move); }
 .tv-today-card.delivery        { border-left-color: var(--tv-delivery); }
 .tv-today-card.reno            { border-left-color: var(--tv-reno);     }
 
@@ -155,6 +157,7 @@
 .tv-today-card.move-in         .tv-card-type { color: var(--tv-move-in);  }
 .tv-today-card.move-out        .tv-card-type { color: var(--tv-move-out); }
 .tv-today-card.furnished-move  .tv-card-type { color: var(--tv-furnished-move); }
+.tv-today-card.suitcase-move   .tv-card-type { color: var(--tv-suitcase-move); }
 .tv-today-card.delivery        .tv-card-type { color: var(--tv-delivery); }
 .tv-today-card.reno            .tv-card-type { color: var(--tv-reno);     }
 
@@ -254,6 +257,7 @@
 .tv-upcoming-badge.move-in         { background: var(--tv-move-in);  }
 .tv-upcoming-badge.move-out        { background: var(--tv-move-out); }
 .tv-upcoming-badge.furnished-move  { background: var(--tv-furnished-move); }
+.tv-upcoming-badge.suitcase-move   { background: var(--tv-suitcase-move); }
 .tv-upcoming-badge.delivery        { background: var(--tv-delivery); }
 .tv-upcoming-badge.reno            { background: var(--tv-reno);     }
 

@@ -127,6 +127,10 @@ function fitsInSlot(startMins: number, endMins: number, slots: [number, number][
  *   Monday–Friday: 10:00 AM – 4:00 PM
  *   Saturday–Sunday: 8:00 AM – 5:00 PM
  *
+ * SUITCASE_MOVE (1-hour slots):
+ *   Monday–Friday: same fixed 4-hour slots as moves (9am–1pm or 1pm–5pm)
+ *   Saturday–Sunday: same fixed 4-hour slots as moves (8am–12pm, 12pm–4pm, or 4pm–8pm)
+ *
  * No bookings on statutory holidays.
  */
 export function validateMoveTime(startDatetime: Date, endDatetime: Date, moveType?: string): MoveTimeValidationResult {
@@ -208,6 +212,33 @@ export function validateMoveTime(startDatetime: Date, endDatetime: Date, moveTyp
     return { valid: true };
   }
 
+  // SUITCASE_MOVE: 1-hour slots within the same fixed 4-hour move windows
+  if (moveType === 'SUITCASE_MOVE') {
+    const durationMins = end.diff(start, 'minute');
+    if (durationMins !== 60) {
+      return { valid: false, error: 'Suitcase Move bookings must be exactly 1 hour' };
+    }
+    if (isWeekend) {
+      if (!fitsInSlot(startMins, endMins, WEEKEND_SLOTS)) {
+        return {
+          valid: false,
+          error: 'Suitcase Move bookings must fit within one permitted slot: 8am–12pm, 12pm–4pm, or 4pm–8pm'
+        };
+      }
+      return { valid: true };
+    }
+    if (dayOfWeek >= 1 && dayOfWeek <= 5) {
+      if (!fitsInSlot(startMins, endMins, WEEKDAY_SLOTS)) {
+        return {
+          valid: false,
+          error: 'Suitcase Move bookings must fit within one permitted slot: 9am–1pm or 1pm–5pm'
+        };
+      }
+      return { valid: true };
+    }
+    return { valid: false, error: 'Invalid day of week' };
+  }
+
   // MOVE_IN / MOVE_OUT / FURNISHED_MOVE (and fallback): fixed 4-hour slot validation
   if (isWeekend) {
     if (!fitsInSlot(startMins, endMins, WEEKEND_SLOTS)) {
@@ -240,6 +271,7 @@ export function getPermittedMoveTimes(): string {
 • Monday–Friday: 9:00 AM–1:00 PM or 1:00 PM–5:00 PM (moves); 10:00 AM–4:00 PM (deliveries/renos)
 • Saturday–Sunday: 8:00 AM–12:00 PM, 12:00 PM–4:00 PM, or 4:00 PM–8:00 PM (moves); 8:00 AM–5:00 PM (deliveries/renos)
 • Open House: Saturday or Sunday only, 2:00 PM–5:00 PM
+• Suitcase Move: 1-hour slots within move windows (same hours as moves)
 • NO BOOKINGS PERMITTED ON STATUTORY HOLIDAYS`;
 }
 

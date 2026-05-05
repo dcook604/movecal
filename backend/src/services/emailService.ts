@@ -12,6 +12,7 @@ const MOVE_TYPE_LABELS: Record<MoveType, string> = {
   DELIVERY: 'Delivery',
   RENO: 'Renovation',
   OPEN_HOUSE: 'Open House',
+  SUITCASE_MOVE: 'Suitcase Move',
 };
 
 type BookingEmailData = {
