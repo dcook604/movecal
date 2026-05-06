@@ -6,16 +6,16 @@ import '../styles/resident.css';
 // ── Time slot definitions ─────────────────────────────────────
 type Slot = { label: string; start: string; end: string };
 
-// Fixed 4-hour slots for MOVE_IN / MOVE_OUT / FURNISHED_MOVE
+// Fixed 3-hour slots for MOVE_IN / MOVE_OUT / FURNISHED_MOVE
 const MOVE_WEEKDAY_SLOTS: Slot[] = [
-  { label: '9:00 AM – 1:00 PM',  start: '09:00', end: '13:00' },
-  { label: '1:00 PM – 5:00 PM',  start: '13:00', end: '17:00' },
+  { label: '9:00 AM – 12:00 PM', start: '09:00', end: '12:00' },
+  { label: '1:00 PM – 4:00 PM',  start: '13:00', end: '16:00' },
 ];
 
 const MOVE_WEEKEND_SLOTS: Slot[] = [
-  { label: '8:00 AM – 12:00 PM', start: '08:00', end: '12:00' },
-  { label: '12:00 PM – 4:00 PM', start: '12:00', end: '16:00' },
-  { label: '4:00 PM – 8:00 PM',  start: '16:00', end: '20:00' },
+  { label: '8:00 AM – 11:00 AM', start: '08:00', end: '11:00' },
+  { label: '12:00 PM – 3:00 PM', start: '12:00', end: '15:00' },
+  { label: '4:00 PM – 7:00 PM',  start: '16:00', end: '19:00' },
 ];
 
 // Fixed slot for OPEN_HOUSE (weekends only)
@@ -110,11 +110,20 @@ function getSlotsForDateAndType(dateStr: string, moveType: string): Slot[] | nul
   }
 
   if (moveType === 'SUITCASE_MOVE') {
-    const [rangeStart, rangeEnd] = isWeekend ? [8 * 60, 20 * 60] : [9 * 60, 17 * 60];
-    return generateTimeSlots(rangeStart, rangeEnd, 60);
+    if (isWeekend) {
+      return [
+        ...generateTimeSlots(8 * 60, 11 * 60, 60),
+        ...generateTimeSlots(12 * 60, 15 * 60, 60),
+        ...generateTimeSlots(16 * 60, 19 * 60, 60),
+      ];
+    }
+    return [
+      ...generateTimeSlots(9 * 60, 12 * 60, 60),
+      ...generateTimeSlots(13 * 60, 16 * 60, 60),
+    ];
   }
 
-  // MOVE_IN / MOVE_OUT / FURNISHED_MOVE: fixed 4-hour slots
+  // MOVE_IN / MOVE_OUT / FURNISHED_MOVE: fixed 3-hour slots
   return isWeekend ? MOVE_WEEKEND_SLOTS : MOVE_WEEKDAY_SLOTS;
 }
 
@@ -350,17 +359,17 @@ export function ResidentSubmissionPage() {
               <div>
                 <strong>Monday – Friday</strong>
                 <ul className="move-times-list">
-                  <li>9:00 AM – 1:00 PM</li>
-                  <li>1:00 PM – 5:00 PM</li>
+                  <li>9:00 AM – 12:00 PM</li>
+                  <li>1:00 PM – 4:00 PM</li>
                 </ul>
                 <small>1-hour slots</small>
               </div>
               <div>
                 <strong>Saturday &amp; Sunday</strong>
                 <ul className="move-times-list">
-                  <li>8:00 AM – 12:00 PM</li>
-                  <li>12:00 PM – 4:00 PM</li>
-                  <li>4:00 PM – 8:00 PM</li>
+                  <li>8:00 AM – 11:00 AM</li>
+                  <li>12:00 PM – 3:00 PM</li>
+                  <li>4:00 PM – 7:00 PM</li>
                 </ul>
                 <small>1-hour slots</small>
               </div>
@@ -370,16 +379,16 @@ export function ResidentSubmissionPage() {
               <div>
                 <strong>Monday – Friday</strong>
                 <ul className="move-times-list">
-                  <li>9:00 AM – 1:00 PM</li>
-                  <li>1:00 PM – 5:00 PM</li>
+                  <li>9:00 AM – 12:00 PM</li>
+                  <li>1:00 PM – 4:00 PM</li>
                 </ul>
               </div>
               <div>
                 <strong>Saturday &amp; Sunday</strong>
                 <ul className="move-times-list">
-                  <li>8:00 AM – 12:00 PM</li>
-                  <li>12:00 PM – 4:00 PM</li>
-                  <li>4:00 PM – 8:00 PM</li>
+                  <li>8:00 AM – 11:00 AM</li>
+                  <li>12:00 PM – 3:00 PM</li>
+                  <li>4:00 PM – 7:00 PM</li>
                 </ul>
               </div>
             </div>
