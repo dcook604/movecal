@@ -895,7 +895,7 @@ export function AdminPage() {
       {/* ── Stats ── */}
       {stats && (
         <div className="admin-section">
-          <h3>Statistics</h3>
+          <h3>Statistics — {stats.year}</h3>
           <div className="admin-stats-grid">
             <div className="admin-stat-card"><div className="admin-stat-value">{stats.totalBookings    || 0}</div><div className="admin-stat-label">Total</div></div>
             <div className="admin-stat-card"><div className="admin-stat-value">{stats.approvedBookings || 0}</div><div className="admin-stat-label">Approved</div></div>

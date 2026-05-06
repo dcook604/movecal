@@ -12,14 +12,16 @@ import { checkAndApproveMoveRequest } from '../services/moveApprovalService.js';
 export async function adminRoutes(app: FastifyInstance) {
   app.get('/api/admin/stats', { preHandler: [requireRole([UserRole.CONCIERGE, UserRole.COUNCIL, UserRole.PROPERTY_MANAGER])] }, async () => {
     const now = new Date();
+    const yearStart = new Date(now.getFullYear(), 0, 1);
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const yearFilter = { moveDate: { gte: yearStart } };
     const [total, approved, pending, thisMonth] = await Promise.all([
-      prisma.booking.count(),
-      prisma.booking.count({ where: { status: BookingStatus.APPROVED } }),
-      prisma.booking.count({ where: { status: { in: [BookingStatus.PENDING, BookingStatus.SUBMITTED] } } }),
+      prisma.booking.count({ where: yearFilter }),
+      prisma.booking.count({ where: { status: BookingStatus.APPROVED, ...yearFilter } }),
+      prisma.booking.count({ where: { status: { in: [BookingStatus.PENDING, BookingStatus.SUBMITTED] }, ...yearFilter } }),
       prisma.booking.count({ where: { moveDate: { gte: monthStart } } }),
     ]);
-    return { totalBookings: total, approvedBookings: approved, pendingBookings: pending, bookingsThisMonth: thisMonth };
+    return { totalBookings: total, approvedBookings: approved, pendingBookings: pending, bookingsThisMonth: thisMonth, year: now.getFullYear() };
   });
 
   app.get('/api/admin/settings', { preHandler: [requireRole([UserRole.COUNCIL, UserRole.PROPERTY_MANAGER])] }, async () => {
