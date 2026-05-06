@@ -148,8 +148,9 @@ export async function systemRoutes(app: FastifyInstance) {
     const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
     await prisma.passwordResetToken.create({ data: { userId: user.id, token, expiresAt } });
 
-    const origin = (req.headers.origin as string | undefined) ?? config.frontendOrigins?.[0] ?? '';
-    const resetLink = `${origin}/admin?reset=${token}`;
+    const origin = (req.headers.origin as string | undefined) ?? '';
+    const allowedOrigin = config.frontendOrigins?.includes(origin) ? origin : config.frontendOrigins?.[0] ?? '';
+    const resetLink = `${allowedOrigin}/admin?reset=${token}`;
 
     await sendEmail(
       prisma,

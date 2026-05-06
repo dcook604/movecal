@@ -35,7 +35,7 @@ export function decrypt(value?: string | null) {
   if (parts.length !== 4) return undefined;
   const [, ivHex, tagHex, dataHex] = parts;
   if (!ivHex || !tagHex || !dataHex) return undefined;
-  const decipher = crypto.createDecipheriv('aes-256-gcm', key, Buffer.from(ivHex, 'hex'));
+  const decipher = crypto.createDecipheriv('aes-256-gcm', key, Buffer.from(ivHex, 'hex'), { authTagLength: 16 });
   decipher.setAuthTag(Buffer.from(tagHex, 'hex'));
   return Buffer.concat([decipher.update(Buffer.from(dataHex, 'hex')), decipher.final()]).toString('utf8');
 }
