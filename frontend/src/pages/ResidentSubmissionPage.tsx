@@ -6,16 +6,27 @@ import '../styles/resident.css';
 // ── Time slot definitions ─────────────────────────────────────
 type Slot = { label: string; start: string; end: string };
 
-// Fixed 3-hour slots for MOVE_IN / MOVE_OUT / FURNISHED_MOVE
+// Fixed slots for MOVE_IN / MOVE_OUT
 const MOVE_WEEKDAY_SLOTS: Slot[] = [
   { label: '9:00 AM – 12:00 PM', start: '09:00', end: '12:00' },
   { label: '1:00 PM – 4:00 PM',  start: '13:00', end: '16:00' },
 ];
 
 const MOVE_WEEKEND_SLOTS: Slot[] = [
-  { label: '8:00 AM – 11:00 AM', start: '08:00', end: '11:00' },
   { label: '12:00 PM – 3:00 PM', start: '12:00', end: '15:00' },
   { label: '4:00 PM – 7:00 PM',  start: '16:00', end: '19:00' },
+];
+
+// 2-hour slots for FURNISHED_MOVE
+const FURNISHED_WEEKDAY_SLOTS: Slot[] = [
+  { label: '10:00 AM – 12:00 PM', start: '10:00', end: '12:00' },
+  { label: '12:00 PM – 2:00 PM',  start: '12:00', end: '14:00' },
+  { label: '2:00 PM – 4:00 PM',   start: '14:00', end: '16:00' },
+];
+
+const FURNISHED_WEEKEND_SLOTS: Slot[] = [
+  { label: '12:00 PM – 2:00 PM', start: '12:00', end: '14:00' },
+  { label: '2:00 PM – 4:00 PM',  start: '14:00', end: '16:00' },
 ];
 
 // Fixed slot for OPEN_HOUSE (weekends only)
@@ -123,7 +134,11 @@ function getSlotsForDateAndType(dateStr: string, moveType: string): Slot[] | nul
     ];
   }
 
-  // MOVE_IN / MOVE_OUT / FURNISHED_MOVE: fixed 3-hour slots
+  if (moveType === 'FURNISHED_MOVE') {
+    return isWeekend ? FURNISHED_WEEKEND_SLOTS : FURNISHED_WEEKDAY_SLOTS;
+  }
+
+  // MOVE_IN / MOVE_OUT: fixed slots
   return isWeekend ? MOVE_WEEKEND_SLOTS : MOVE_WEEKDAY_SLOTS;
 }
 
@@ -323,6 +338,7 @@ export function ResidentSubmissionPage() {
   const isDeliveryOrReno = form.moveType === 'DELIVERY' || form.moveType === 'RENO';
   const isOpenHouseType = form.moveType === 'OPEN_HOUSE';
   const isSuitcaseMove = form.moveType === 'SUITCASE_MOVE';
+  const isFurnishedMove = form.moveType === 'FURNISHED_MOVE';
   const blockLabel = form.moveType === 'DELIVERY' ? '30-minute blocks' : '1-hour slots';
 
   return (
@@ -374,6 +390,24 @@ export function ResidentSubmissionPage() {
                 <small>1-hour slots</small>
               </div>
             </div>
+          ) : isFurnishedMove ? (
+            <div className="move-times-grid">
+              <div>
+                <strong>Monday – Friday</strong>
+                <ul className="move-times-list">
+                  <li>10:00 AM – 12:00 PM</li>
+                  <li>12:00 PM – 2:00 PM</li>
+                  <li>2:00 PM – 4:00 PM</li>
+                </ul>
+              </div>
+              <div>
+                <strong>Saturday &amp; Sunday</strong>
+                <ul className="move-times-list">
+                  <li>12:00 PM – 2:00 PM</li>
+                  <li>2:00 PM – 4:00 PM</li>
+                </ul>
+              </div>
+            </div>
           ) : (
             <div className="move-times-grid">
               <div>
@@ -386,7 +420,6 @@ export function ResidentSubmissionPage() {
               <div>
                 <strong>Saturday &amp; Sunday</strong>
                 <ul className="move-times-list">
-                  <li>8:00 AM – 11:00 AM</li>
                   <li>12:00 PM – 3:00 PM</li>
                   <li>4:00 PM – 7:00 PM</li>
                 </ul>
