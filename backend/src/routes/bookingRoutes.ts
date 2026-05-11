@@ -231,7 +231,7 @@ export async function bookingRoutes(app: FastifyInstance) {
         `Booking Request Received — ${moveTypeLabel} on ${dateLabel}`,
         emailWrapper(
           'Booking Request Received',
-          'Your booking request has been submitted and is pending review. If no action is taken within 24 hours, it will be automatically approved.',
+          'Your booking request has been submitted and is pending review.',
           bookingDetailsHtml(booking)
         )
       ).catch((err) => {
