@@ -65,21 +65,27 @@ export function bookingDetailsHtml(b: BookingEmailData, includeContact = false, 
 export function emailWrapper(title: string, intro: string, body: string, footer?: string, manageUrl?: string): string {
   const manageButton = manageUrl
     ? `<p style="margin:24px 0;text-align:center">
-        <a href="${manageUrl}" style="display:inline-block;background:#1a1a2e;color:#fff;padding:12px 28px;border-radius:6px;text-decoration:none;font-weight:600;font-size:15px">
+        <a href="${manageUrl}" style="display:inline-block;background:#3090d0;color:#fff;padding:14px 32px;border-radius:6px;text-decoration:none;font-weight:600;font-size:15px">
           View / Manage Booking
         </a>
        </p>`
     : '';
-  return `<!DOCTYPE html><html><body style="margin:0;padding:0;background:#f5f5f5">
-  <div style="max-width:600px;margin:32px auto;background:#fff;border-radius:8px;overflow:hidden;font-family:Arial,sans-serif">
-    <div style="background:#1a1a2e;padding:20px 28px">
+  return `<!DOCTYPE html><html><body style="margin:0;padding:0;background:#f0f4f8">
+  <div style="max-width:600px;margin:32px auto;background:#fff;border-radius:8px;overflow:hidden;font-family:Arial,Helvetica,sans-serif;box-shadow:0 2px 8px rgba(0,0,0,0.08)">
+    <div style="text-align:center;padding:24px 28px 12px">
+      <img src="https://listmonk.spectrum4.ca/uploads/spectrum4-small.jpeg" alt="Spectrum 4" style="width:120px;height:auto;border:0" />
+    </div>
+    <div style="background:#3090d0;padding:20px 28px">
       <h1 style="margin:0;color:#fff;font-size:20px">${title}</h1>
     </div>
     <div style="padding:24px 28px">
-      <p style="margin-top:0;color:#333">${intro}</p>
+      <p style="margin-top:0;color:#333;font-size:15px;line-height:1.5">${intro}</p>
       ${body}
       ${manageButton}
-      ${footer ? `<p style="color:#555;margin-top:24px;font-size:14px">${footer}</p>` : ''}
+      ${footer ? `<p style="color:#666;margin-top:24px;font-size:14px;line-height:1.5">${footer}</p>` : ''}
+    </div>
+    <div style="background:#f8fafc;padding:16px 28px;border-top:1px solid #e2e8f0;text-align:center">
+      <p style="margin:0;color:#94a3b8;font-size:12px">Spectrum 4 Property Management</p>
     </div>
   </div>
   </body></html>`;
