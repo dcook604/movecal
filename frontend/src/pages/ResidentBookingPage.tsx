@@ -449,7 +449,7 @@ export function ResidentBookingPage() {
               {/* ── Change date/time ─────────────────────── */}
               {showTimeOptions && (
                 <div className="form-field" style={{ marginTop: 16 }}>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontWeight: 600 }}>
+                  <label className="checkbox-label" style={{ fontWeight: 600 }}>
                     <input type="checkbox" checked={changingTime}
                       onChange={(e) => { setChangingTime(e.target.checked); if (!e.target.checked) setEditSlot(''); }} />
                     Change date or time slot

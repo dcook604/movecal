@@ -1,5 +1,6 @@
 import { FormEvent, useEffect, useState } from 'react';
 import dayjs from 'dayjs';
+import { useNavigate } from 'react-router-dom';
 import { api } from '../api';
 import '../styles/resident.css';
 
@@ -204,6 +205,7 @@ const NOTES_MAX = 500;
 type FieldErrors = Partial<Record<'residentName' | 'residentEmail' | 'residentPhone' | 'unit' | 'moveDate' | 'notes', string>>;
 
 export function ResidentSubmissionPage() {
+  const navigate = useNavigate();
   const [form, setForm] = useState<any>({ moveType: 'MOVE_IN', elevatorRequired: true, loadingBayRequired: false });
   const [slot, setSlot] = useState('');
   const [accepted, setAccepted] = useState(false);
@@ -320,14 +322,10 @@ export function ResidentSubmissionPage() {
     setError('');
     setMessage('');
     try {
-      await api.post('/api/bookings', { ...form, startDatetime, endDatetime });
-      setMessage('Booking request submitted successfully! Check your email for confirmation.');
-      setForm({ moveType: 'MOVE_IN', elevatorRequired: true, loadingBayRequired: false });
-      setSlot('');
-      setAccepted(false);
-      setAcceptedFees(false);
-      setFieldErrors({});
-      setTouched(new Set());
+      const res = await api.post('/api/bookings', { ...form, startDatetime, endDatetime });
+      const booking = res.data;
+      navigate(`/booking/${booking.id}/confirmation?token=${booking.editToken}`);
+      return;
     } catch (err: any) {
       setError(err.response?.data?.message || 'Failed to submit request. Please try again.');
     } finally {

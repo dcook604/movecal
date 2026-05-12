@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import ReactDOM from 'react-dom/client';
 import { BrowserRouter, NavLink, Route, Routes, useLocation } from 'react-router-dom';
 import { PublicCalendarPage } from './pages/PublicCalendarPage';
+import { BookingConfirmationPage } from './pages/BookingConfirmationPage';
 import { ResidentBookingPage } from './pages/ResidentBookingPage';
 import { ResidentSubmissionPage } from './pages/ResidentSubmissionPage';
 import { AdminPage } from './pages/AdminPage';
@@ -43,7 +44,8 @@ function App() {
       <Routes>
         <Route path="/"                element={<PublicCalendarPage />} />
         <Route path="/submit"          element={<ResidentSubmissionPage />} />
-        <Route path="/booking/:id"     element={<ResidentBookingPage />} />
+        <Route path="/booking/:id"              element={<ResidentBookingPage />} />
+        <Route path="/booking/:id/confirmation" element={<BookingConfirmationPage />} />
         <Route path="/admin"           element={<AdminPage />} />
         <Route path="/admin/payments"  element={<PaymentsLedgerPage />} />
         <Route path="/tv"              element={<LobbyTVPage />} />
