@@ -2,6 +2,7 @@ import { BookingStatus, MoveType, UserRole } from '@prisma/client';
 import { prisma } from '../prisma.js';
 import { sendPaymentReminderEmail, sendEarlyPaymentWarningEmail } from './emailService.js';
 import { logAudit } from './auditService.js';
+import { config } from '../config.js';
 
 const CHECK_INTERVAL_MS = 5 * 60 * 1000; // every 5 minutes
 
@@ -45,7 +46,8 @@ export async function runPaymentReminders() {
     if (booking.createdAt > thirtyMinutesAgo) continue;
 
     try {
-      await sendEarlyPaymentWarningEmail(prisma, booking);
+      const manageUrl = booking.editToken ? `${config.frontendOrigins[0]}/booking/${booking.id}?token=${booking.editToken}` : undefined;
+      await sendEarlyPaymentWarningEmail(prisma, booking, manageUrl);
       await prisma.booking.update({
         where: { id: booking.id },
         data: { earlyPaymentReminderSentAt: new Date() },
@@ -57,7 +59,8 @@ export async function runPaymentReminders() {
 
   for (const booking of unpaidBookings) {
     try {
-      await sendPaymentReminderEmail(prisma, booking);
+      const manageUrl = booking.editToken ? `${config.frontendOrigins[0]}/booking/${booking.id}?token=${booking.editToken}` : undefined;
+      await sendPaymentReminderEmail(prisma, booking, manageUrl);
       await prisma.booking.update({
         where: { id: booking.id },
         data: { lastPaymentReminderSentAt: new Date() },

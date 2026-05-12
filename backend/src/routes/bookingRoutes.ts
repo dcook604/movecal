@@ -118,6 +118,7 @@ export async function bookingRoutes(app: FastifyInstance) {
           loadingBayRequired: body.loadingBayRequired,
           notes: body.notes,
           publicUnitMask: body.publicUnitMask,
+          editToken: nanoid(32),
           status: BookingStatus.SUBMITTED
         }
       });
@@ -152,6 +153,7 @@ export async function bookingRoutes(app: FastifyInstance) {
 
     const moveTypeLabel = { MOVE_IN: 'Move In', MOVE_OUT: 'Move Out', DELIVERY: 'Delivery', RENO: 'Renovation', OPEN_HOUSE: 'Open House', FURNISHED_MOVE: 'Furnished Move', SUITCASE_MOVE: 'Suitcase Move' }[booking.moveType] ?? booking.moveType;
     const dateLabel = dayjs(booking.startDatetime).format('MMM D, YYYY');
+    const manageUrl = booking.editToken ? `${config.frontendOrigins[0]}/booking/${booking.id}?token=${booking.editToken}` : undefined;
 
     if (openHouseAutoApproved) {
       // Open house bookings are auto-approved — no payment needed
@@ -175,7 +177,9 @@ export async function bookingRoutes(app: FastifyInstance) {
         emailWrapper(
           'Booking Approved',
           'Your open house booking has been automatically approved.',
-          bookingDetailsHtml(booking, false, true)
+          bookingDetailsHtml(booking, false, true),
+          undefined,
+          manageUrl
         )
       ).catch((err) => {
         app.log.error({ err, bookingId: booking.id, email: body.residentEmail }, 'Failed to send open house auto-approval email');
@@ -202,7 +206,9 @@ export async function bookingRoutes(app: FastifyInstance) {
         emailWrapper(
           'Booking Approved',
           'Your move fee payment has been confirmed. Your booking has been automatically approved.',
-          bookingDetailsHtml(booking, false, true)
+          bookingDetailsHtml(booking, false, true),
+          undefined,
+          manageUrl
         )
       ).catch((err) => {
         app.log.error({ err, bookingId: booking.id, email: body.residentEmail }, 'Failed to send auto-approval email');
@@ -232,7 +238,9 @@ export async function bookingRoutes(app: FastifyInstance) {
         emailWrapper(
           'Booking Request Received',
           'Your booking request has been submitted and is pending review.',
-          bookingDetailsHtml(booking)
+          bookingDetailsHtml(booking),
+          undefined,
+          manageUrl
         )
       ).catch((err) => {
         app.log.error({ err, bookingId: booking.id, email: body.residentEmail }, 'Failed to send booking confirmation email');
@@ -280,6 +288,7 @@ export async function bookingRoutes(app: FastifyInstance) {
           loadingBayRequired: body.loadingBayRequired,
           notes: body.notes,
           publicUnitMask: body.publicUnitMask,
+          editToken: nanoid(32),
           status: BookingStatus.APPROVED,
           approvedById: user.id,
           approvedAt: new Date()
@@ -380,6 +389,8 @@ export async function bookingRoutes(app: FastifyInstance) {
 
     if (allowOverride) await logAudit(prisma, user.id, 'CONFLICT_OVERRIDE', updated.id, { old: existing, new: updated });
 
+    const manageUrl = updated.editToken ? `${config.frontendOrigins[0]}/booking/${updated.id}?token=${updated.editToken}` : undefined;
+
     if (body.status === BookingStatus.APPROVED) {
       const [settings, moveApproval] = await Promise.all([
         prisma.appSetting.findFirst(),
@@ -397,7 +408,9 @@ export async function bookingRoutes(app: FastifyInstance) {
         emailWrapper(
           'Booking Approved',
           'Your booking request has been approved. Please see the details below.',
-          bookingDetailsHtml(updated, false, paymentConfirmed)
+          bookingDetailsHtml(updated, false, paymentConfirmed),
+          undefined,
+          manageUrl
         )
       ).catch((err) => {
         app.log.error({ err, bookingId: updated.id, email: updated.residentEmail }, 'Failed to send booking approval email');
@@ -430,7 +443,9 @@ export async function bookingRoutes(app: FastifyInstance) {
         emailWrapper(
           'Booking Not Approved',
           'Unfortunately your booking request could not be approved. Please contact building management if you have any questions.',
-          bookingDetailsHtml(updated)
+          bookingDetailsHtml(updated),
+          undefined,
+          manageUrl
         )
       ).catch((err) => {
         app.log.error({ err, bookingId: updated.id, email: updated.residentEmail }, 'Failed to send booking rejection email');

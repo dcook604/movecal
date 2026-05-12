@@ -62,7 +62,14 @@ export function bookingDetailsHtml(b: BookingEmailData, includeContact = false, 
   <p style="font-size:12px;color:#888;margin-top:16px">Reference: ${b.id}</p>`;
 }
 
-export function emailWrapper(title: string, intro: string, body: string, footer?: string): string {
+export function emailWrapper(title: string, intro: string, body: string, footer?: string, manageUrl?: string): string {
+  const manageButton = manageUrl
+    ? `<p style="margin:24px 0;text-align:center">
+        <a href="${manageUrl}" style="display:inline-block;background:#1a1a2e;color:#fff;padding:12px 28px;border-radius:6px;text-decoration:none;font-weight:600;font-size:15px">
+          View / Manage Booking
+        </a>
+       </p>`
+    : '';
   return `<!DOCTYPE html><html><body style="margin:0;padding:0;background:#f5f5f5">
   <div style="max-width:600px;margin:32px auto;background:#fff;border-radius:8px;overflow:hidden;font-family:Arial,sans-serif">
     <div style="background:#1a1a2e;padding:20px 28px">
@@ -71,6 +78,7 @@ export function emailWrapper(title: string, intro: string, body: string, footer?
     <div style="padding:24px 28px">
       <p style="margin-top:0;color:#333">${intro}</p>
       ${body}
+      ${manageButton}
       ${footer ? `<p style="color:#555;margin-top:24px;font-size:14px">${footer}</p>` : ''}
     </div>
   </div>
@@ -106,7 +114,7 @@ export async function sendNotificationRecipients(prisma: PrismaClient, event: No
   await sendEmail(prisma, recipients.map((r) => r.email), subject, html);
 }
 
-export async function sendPaymentReminderEmail(prisma: PrismaClient, booking: BookingEmailData) {
+export async function sendPaymentReminderEmail(prisma: PrismaClient, booking: BookingEmailData, manageUrl?: string) {
   await sendEmail(
     prisma,
     booking.residentEmail,
@@ -115,12 +123,13 @@ export async function sendPaymentReminderEmail(prisma: PrismaClient, booking: Bo
       'Payment Reminder',
       'Your move booking has not been confirmed because a payment has not been received. Please arrange payment as soon as possible — your booking will remain unconfirmed until payment is verified.',
       bookingDetailsHtml(booking),
-      'You will receive this reminder every 24 hours until payment is confirmed.'
+      'You will receive this reminder every 24 hours until payment is confirmed.',
+      manageUrl
     )
   );
 }
 
-export async function sendEarlyPaymentWarningEmail(prisma: PrismaClient, booking: BookingEmailData) {
+export async function sendEarlyPaymentWarningEmail(prisma: PrismaClient, booking: BookingEmailData, manageUrl?: string) {
   const moveLabel = MOVE_TYPE_LABELS[booking.moveType] ?? booking.moveType;
   const dateLabel = dayjs(booking.startDatetime).format('MMM D, YYYY');
   await sendEmail(
@@ -131,7 +140,8 @@ export async function sendEarlyPaymentWarningEmail(prisma: PrismaClient, booking
       'Payment Required to Confirm Your Booking',
       'Your booking request has been received, but we have not yet received a payment. <strong>If payment is not received, your booking may be cancelled.</strong> Please arrange payment as soon as possible.',
       bookingDetailsHtml(booking),
-      'If you have already submitted payment, please disregard this message — confirmation may take a short time to process.'
+      'If you have already submitted payment, please disregard this message — confirmation may take a short time to process.',
+      manageUrl
     )
   );
 }
