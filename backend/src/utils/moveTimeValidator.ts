@@ -90,22 +90,27 @@ interface MoveTimeValidationResult {
 }
 
 // MOVE_IN / MOVE_OUT: Monday–Friday slots
-const WEEKDAY_SLOTS: [number, number][] = [
-  [ 9 * 60, 12 * 60], // 9:00 AM  – 12:00 PM
-  [13 * 60, 16 * 60], // 1:00 PM  – 4:00 PM
+const MOVE_INOUT_WEEKDAY_SLOTS: [number, number][] = [
+  [ 9 * 60, 12 * 60], //  9:00 AM – 12:00 PM
+  [13 * 60, 16 * 60], //  1:00 PM –  4:00 PM
 ];
 
-// MOVE_IN / MOVE_OUT: Saturday–Sunday (8am–11am removed)
+// MOVE_IN / MOVE_OUT: Saturday–Sunday
 const MOVE_INOUT_WEEKEND_SLOTS: [number, number][] = [
-  [12 * 60, 15 * 60], // 12:00 PM – 3:00 PM
-  [16 * 60, 19 * 60], //  4:00 PM – 7:00 PM
-];
-
-// SUITCASE_MOVE: Saturday–Sunday (retains 8am–11am)
-const WEEKEND_SLOTS: [number, number][] = [
-  [ 8 * 60, 11 * 60], //  8:00 AM – 11:00 AM
   [12 * 60, 15 * 60], // 12:00 PM –  3:00 PM
   [16 * 60, 19 * 60], //  4:00 PM –  7:00 PM
+];
+
+// SUITCASE_MOVE: Monday–Friday slots
+const WEEKDAY_SLOTS: [number, number][] = [
+  [10 * 60, 13 * 60], // 10:00 AM –  1:00 PM
+  [13 * 60, 16 * 60], //  1:00 PM –  4:00 PM
+];
+
+// SUITCASE_MOVE: Saturday–Sunday
+const WEEKEND_SLOTS: [number, number][] = [
+  [11 * 60, 14 * 60], // 11:00 AM –  2:00 PM
+  [14 * 60, 17 * 60], //  2:00 PM –  5:00 PM
 ];
 
 // FURNISHED_MOVE: 2-hour slots
@@ -149,8 +154,8 @@ function fitsInSlot(startMins: number, endMins: number, slots: [number, number][
  *   Saturday–Sunday: 8:00 AM – 5:00 PM
  *
  * SUITCASE_MOVE (1-hour slots):
- *   Monday–Friday: same fixed 3-hour slots as moves (9am–12pm or 1pm–4pm)
- *   Saturday–Sunday: same fixed 3-hour slots as moves (8am–11am, 12pm–3pm, or 4pm–7pm)
+ *   Monday–Friday: same fixed 3-hour slots as moves (10am–1pm or 1pm–4pm)
+ *   Saturday–Sunday: same fixed 3-hour slots as moves (11am–2pm or 2pm–5pm)
  *
  * No bookings on statutory holidays.
  */
@@ -243,7 +248,7 @@ export function validateMoveTime(startDatetime: Date, endDatetime: Date, moveTyp
       if (!fitsInSlot(startMins, endMins, WEEKEND_SLOTS)) {
         return {
           valid: false,
-          error: 'Suitcase Move bookings must fit within one permitted slot: 8am–11am, 12pm–3pm, or 4pm–7pm'
+          error: 'Suitcase Move bookings must fit within one permitted slot: 11am–2pm or 2pm–5pm'
         };
       }
       return { valid: true };
@@ -252,7 +257,7 @@ export function validateMoveTime(startDatetime: Date, endDatetime: Date, moveTyp
       if (!fitsInSlot(startMins, endMins, WEEKDAY_SLOTS)) {
         return {
           valid: false,
-          error: 'Suitcase Move bookings must fit within one permitted slot: 9am–12pm or 1pm–4pm'
+          error: 'Suitcase Move bookings must fit within one permitted slot: 10am–1pm or 1pm–4pm'
         };
       }
       return { valid: true };
@@ -295,7 +300,7 @@ export function validateMoveTime(startDatetime: Date, endDatetime: Date, moveTyp
   }
 
   if (dayOfWeek >= 1 && dayOfWeek <= 5) {
-    if (!fitsInSlot(startMins, endMins, WEEKDAY_SLOTS)) {
+    if (!fitsInSlot(startMins, endMins, MOVE_INOUT_WEEKDAY_SLOTS)) {
       return {
         valid: false,
         error: 'Weekday moves must fit within one permitted slot: 9am–12pm or 1pm–4pm'
@@ -317,7 +322,7 @@ export function getPermittedMoveTimes(): string {
 • Delivery: Monday–Friday 10:00 AM–4:00 PM; Saturday–Sunday 8:00 AM–5:00 PM (30-min blocks)
 • Renovation: Monday–Friday 10:00 AM–4:00 PM; Saturday–Sunday 8:00 AM–5:00 PM (1-hour slots)
 • Open House: Saturday or Sunday only, 2:00 PM–5:00 PM
-• Suitcase Move: 1-hour slots within move windows (Mon–Fri same as Move In/Out; Sat–Sun 8am–11am, 12pm–3pm, 4pm–7pm)
+• Suitcase Move: 1-hour slots within move windows (Mon–Fri same as Move In/Out; Sat–Sun 11am–2pm or 2pm–5pm)
 • NO BOOKINGS PERMITTED ON STATUTORY HOLIDAYS`;
 }
 

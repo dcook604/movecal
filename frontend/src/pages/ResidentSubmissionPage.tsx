@@ -124,13 +124,12 @@ function getSlotsForDateAndType(dateStr: string, moveType: string): Slot[] | nul
   if (moveType === 'SUITCASE_MOVE') {
     if (isWeekend) {
       return [
-        ...generateTimeSlots(8 * 60, 11 * 60, 60),
-        ...generateTimeSlots(12 * 60, 15 * 60, 60),
-        ...generateTimeSlots(16 * 60, 19 * 60, 60),
+        ...generateTimeSlots(11 * 60, 14 * 60, 60),
+        ...generateTimeSlots(14 * 60, 17 * 60, 60),
       ];
     }
     return [
-      ...generateTimeSlots(9 * 60, 12 * 60, 60),
+      ...generateTimeSlots(10 * 60, 13 * 60, 60),
       ...generateTimeSlots(13 * 60, 16 * 60, 60),
     ];
   }
@@ -373,7 +372,7 @@ export function ResidentSubmissionPage() {
               <div>
                 <strong>Monday – Friday</strong>
                 <ul className="move-times-list">
-                  <li>9:00 AM – 12:00 PM</li>
+                  <li>10:00 AM – 1:00 PM</li>
                   <li>1:00 PM – 4:00 PM</li>
                 </ul>
                 <small>1-hour slots</small>
@@ -381,9 +380,8 @@ export function ResidentSubmissionPage() {
               <div>
                 <strong>Saturday &amp; Sunday</strong>
                 <ul className="move-times-list">
-                  <li>8:00 AM – 11:00 AM</li>
-                  <li>12:00 PM – 3:00 PM</li>
-                  <li>4:00 PM – 7:00 PM</li>
+                  <li>11:00 AM – 2:00 PM</li>
+                  <li>2:00 PM – 5:00 PM</li>
                 </ul>
                 <small>1-hour slots</small>
               </div>
