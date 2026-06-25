@@ -9,13 +9,16 @@ type Slot = { label: string; start: string; end: string };
 
 // Fixed slots for MOVE_IN / MOVE_OUT
 const MOVE_WEEKDAY_SLOTS: Slot[] = [
-  { label: '9:00 AM – 12:00 PM', start: '09:00', end: '12:00' },
-  { label: '1:00 PM – 4:00 PM',  start: '13:00', end: '16:00' },
+  { label: '9:00 AM – 12:00 PM',  start: '09:00', end: '12:00' },
+  { label: '10:00 AM – 1:00 PM',  start: '10:00', end: '13:00' },
+  { label: '1:00 PM – 4:00 PM',   start: '13:00', end: '16:00' },
 ];
 
 const MOVE_WEEKEND_SLOTS: Slot[] = [
-  { label: '12:00 PM – 3:00 PM', start: '12:00', end: '15:00' },
-  { label: '4:00 PM – 7:00 PM',  start: '16:00', end: '19:00' },
+  { label: '10:00 AM – 1:00 PM',  start: '10:00', end: '13:00' },
+  { label: '12:00 PM – 3:00 PM',  start: '12:00', end: '15:00' },
+  { label: '1:00 PM – 4:00 PM',   start: '13:00', end: '16:00' },
+  { label: '4:00 PM – 7:00 PM',   start: '16:00', end: '19:00' },
 ];
 
 // 2-hour slots for FURNISHED_MOVE
@@ -410,13 +413,16 @@ export function ResidentSubmissionPage() {
                 <strong>Monday – Friday</strong>
                 <ul className="move-times-list">
                   <li>9:00 AM – 12:00 PM</li>
+                  <li>10:00 AM – 1:00 PM</li>
                   <li>1:00 PM – 4:00 PM</li>
                 </ul>
               </div>
               <div>
                 <strong>Saturday &amp; Sunday</strong>
                 <ul className="move-times-list">
+                  <li>10:00 AM – 1:00 PM</li>
                   <li>12:00 PM – 3:00 PM</li>
+                  <li>1:00 PM – 4:00 PM</li>
                   <li>4:00 PM – 7:00 PM</li>
                 </ul>
               </div>

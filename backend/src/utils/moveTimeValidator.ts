@@ -92,12 +92,15 @@ interface MoveTimeValidationResult {
 // MOVE_IN / MOVE_OUT: Monday–Friday slots
 const MOVE_INOUT_WEEKDAY_SLOTS: [number, number][] = [
   [ 9 * 60, 12 * 60], //  9:00 AM – 12:00 PM
+  [10 * 60, 13 * 60], // 10:00 AM –  1:00 PM
   [13 * 60, 16 * 60], //  1:00 PM –  4:00 PM
 ];
 
 // MOVE_IN / MOVE_OUT: Saturday–Sunday
 const MOVE_INOUT_WEEKEND_SLOTS: [number, number][] = [
+  [10 * 60, 13 * 60], // 10:00 AM –  1:00 PM
   [12 * 60, 15 * 60], // 12:00 PM –  3:00 PM
+  [13 * 60, 16 * 60], //  1:00 PM –  4:00 PM
   [16 * 60, 19 * 60], //  4:00 PM –  7:00 PM
 ];
 
@@ -293,7 +296,7 @@ export function validateMoveTime(startDatetime: Date, endDatetime: Date, moveTyp
     if (!fitsInSlot(startMins, endMins, MOVE_INOUT_WEEKEND_SLOTS)) {
       return {
         valid: false,
-        error: 'Weekend moves must fit within one permitted slot: 12pm–3pm or 4pm–7pm'
+        error: 'Weekend moves must fit within one permitted slot: 10am–1pm, 12pm–3pm, 1pm–4pm, or 4pm–7pm'
       };
     }
     return { valid: true };
@@ -303,7 +306,7 @@ export function validateMoveTime(startDatetime: Date, endDatetime: Date, moveTyp
     if (!fitsInSlot(startMins, endMins, MOVE_INOUT_WEEKDAY_SLOTS)) {
       return {
         valid: false,
-        error: 'Weekday moves must fit within one permitted slot: 9am–12pm or 1pm–4pm'
+        error: 'Weekday moves must fit within one permitted slot: 9am–12pm, 10am–1pm, or 1pm–4pm'
       };
     }
     return { valid: true };
@@ -317,7 +320,7 @@ export function validateMoveTime(startDatetime: Date, endDatetime: Date, moveTyp
  */
 export function getPermittedMoveTimes(): string {
   return `Bookings are permitted within the following slots:
-• Move In / Move Out — Monday–Friday: 9:00 AM–12:00 PM or 1:00 PM–4:00 PM; Saturday–Sunday: 12:00 PM–3:00 PM or 4:00 PM–7:00 PM
+• Move In / Move Out — Monday–Friday: 9:00 AM–12:00 PM, 10:00 AM–1:00 PM, or 1:00 PM–4:00 PM; Saturday–Sunday: 10:00 AM–1:00 PM, 12:00 PM–3:00 PM, 1:00 PM–4:00 PM, or 4:00 PM–7:00 PM
 • Furnished Move — Monday–Friday: 10:00 AM–12:00 PM, 12:00 PM–2:00 PM, or 2:00 PM–4:00 PM; Saturday–Sunday: 12:00 PM–2:00 PM or 2:00 PM–4:00 PM
 • Delivery: Monday–Friday 10:00 AM–4:00 PM; Saturday–Sunday 8:00 AM–5:00 PM (30-min blocks)
 • Renovation: Monday–Friday 10:00 AM–4:00 PM; Saturday–Sunday 8:00 AM–5:00 PM (1-hour slots)
