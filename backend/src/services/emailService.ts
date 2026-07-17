@@ -2,6 +2,7 @@ import nodemailer from 'nodemailer';
 import { MoveType, NotifyEvent, PrismaClient } from '@prisma/client';
 import dayjs from 'dayjs';
 import { decrypt } from '../utils/crypto.js';
+import { config } from '../config.js';
 
 // ─── Shared email template helpers ───────────────────────────────────────────
 
@@ -73,7 +74,7 @@ export function emailWrapper(title: string, intro: string, body: string, footer?
   return `<!DOCTYPE html><html><body style="margin:0;padding:0;background:#f0f4f8">
   <div style="max-width:600px;margin:32px auto;background:#fff;border-radius:8px;overflow:hidden;font-family:Arial,Helvetica,sans-serif;box-shadow:0 2px 8px rgba(0,0,0,0.08)">
     <div style="text-align:center;padding:24px 28px 12px">
-      <img src="https://listmonk.spectrum4.ca/uploads/spectrum4-small.jpeg" alt="Spectrum 4" style="width:120px;height:auto;border:0" />
+      <img src="${config.frontendOrigins[0]}/logo-email.jpg" alt="Spectrum 4" style="width:120px;height:auto;border:0" />
     </div>
     <div style="background:#3090d0;padding:20px 28px">
       <h1 style="margin:0;color:#fff;font-size:20px">${title}</h1>
