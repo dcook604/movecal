@@ -1,6 +1,6 @@
 import { FormEvent, useEffect, useState } from 'react';
 import dayjs from 'dayjs';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../api';
 import '../styles/resident.css';
 
@@ -211,6 +211,7 @@ export function ResidentSubmissionPage() {
   const [acceptedFees, setAcceptedFees] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+  const [isDuplicateError, setIsDuplicateError] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [takenRanges, setTakenRanges] = useState<{ start: string; end: string }[]>([]);
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
@@ -263,6 +264,7 @@ export function ResidentSubmissionPage() {
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
+    setIsDuplicateError(false);
 
     // Run all field validations
     const allErrors: FieldErrors = {
@@ -326,6 +328,7 @@ export function ResidentSubmissionPage() {
       navigate(`/booking/${booking.id}/confirmation?token=${booking.editToken}`);
       return;
     } catch (err: any) {
+      setIsDuplicateError(err.response?.status === 409);
       setError(err.response?.data?.message || 'Failed to submit request. Please try again.');
     } finally {
       setIsSubmitting(false);
@@ -585,7 +588,17 @@ export function ResidentSubmissionPage() {
             {isSubmitting ? 'Submitting…' : 'Submit Booking Request'}
           </button>
 
-          {error   && <p className="error-message">{error}</p>}
+          {error && (
+            <p className="error-message">
+              {error}
+              {isDuplicateError && (
+                <>
+                  {' '}
+                  <Link to="/find-booking">Find My Booking</Link>
+                </>
+              )}
+            </p>
+          )}
           {message && <p className="success-message">{message}</p>}
         </form>
       </div>

@@ -69,6 +69,53 @@ export async function publicRoutes(app: FastifyInstance) {
     };
   }
 
+  // Request a resend of booking management link(s) — token-gated bookings can't be found
+  // otherwise if the resident lost their confirmation email.
+  app.post('/api/public/bookings/request-link', {
+    config: { rateLimit: { max: 5, timeWindow: '15 minutes' } }
+  }, async (req) => {
+    const body = z.object({
+      unit: z.string().min(1).max(20),
+      residentEmail: z.string().email().max(320),
+    }).parse(req.body);
+
+    // Always return the same message to prevent leaking whether a unit/email combo has bookings
+    const okMsg = { message: "If we found any matching bookings, we've emailed the management link(s) to that address." };
+
+    const bookings = await prisma.booking.findMany({
+      where: {
+        unit: { equals: body.unit.trim(), mode: 'insensitive' },
+        residentEmail: { equals: body.residentEmail.trim(), mode: 'insensitive' },
+        status: { in: [BookingStatus.SUBMITTED, BookingStatus.PENDING, BookingStatus.APPROVED] },
+      },
+      orderBy: { startDatetime: 'asc' },
+    });
+
+    if (bookings.length === 0) return okMsg;
+
+    const linkItems = bookings.map((b) => {
+      const moveLabel = MOVE_TYPE_LABELS[b.moveType] ?? b.moveType;
+      const manageUrl = `${config.frontendOrigins[0]}/booking/${b.id}?token=${b.editToken}`;
+      return `<li style="margin-bottom:8px"><strong>${moveLabel}</strong> — ${dayjs(b.startDatetime).format('MMM D, YYYY, h:mm A')} — <a href="${manageUrl}">Manage this booking</a></li>`;
+    }).join('');
+
+    const plural = bookings.length > 1 ? 's' : '';
+    await sendEmail(
+      prisma,
+      body.residentEmail,
+      `Your MoveCal Booking Link${plural} — Unit ${body.unit}`,
+      emailWrapper(
+        `Your Booking Management Link${plural}`,
+        `You requested access to your booking(s) for Unit ${body.unit}. Use the link(s) below to view or make changes to your reservation.`,
+        `<ul style="padding-left:20px;line-height:1.6;margin:0">${linkItems}</ul>`
+      )
+    ).catch((err) => {
+      app.log.error({ err, unit: body.unit }, 'Failed to send booking link resend email');
+    });
+
+    return okMsg;
+  });
+
   // GET resident's booking (token-gated)
   app.get('/api/public/bookings/:id', async (req, reply) => {
     const { id } = req.params as { id: string };

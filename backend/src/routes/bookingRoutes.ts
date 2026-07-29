@@ -6,7 +6,7 @@ import path from 'path';
 import fs from 'fs/promises';
 import { nanoid } from 'nanoid';
 import { prisma } from '../prisma.js';
-import { assertNoConflict } from '../services/conflictService.js';
+import { assertNoConflict, assertNoDuplicateMoveRequest } from '../services/conflictService.js';
 import { requireAuth, requireRole } from '../middleware/auth.js';
 import { sendEmail, sendNotificationRecipients, bookingDetailsHtml, emailWrapper, sendPaymentConfirmationToDcook, sendPaymentReminderEmail } from '../services/emailService.js';
 import { logAudit } from '../services/auditService.js';
@@ -97,6 +97,7 @@ export async function bookingRoutes(app: FastifyInstance) {
     if (!systemUser) return reply.status(500).send({ message: 'Seed concierge user first' });
 
     const booking = await prisma.$transaction(async (tx) => {
+      await assertNoDuplicateMoveRequest(tx, { unit: body.unit, moveDate: body.moveDate, moveType: body.moveType });
       await assertNoConflict(
         tx,
         { startDatetime: body.startDatetime, endDatetime: body.endDatetime, elevatorRequired: body.elevatorRequired, moveType: body.moveType },

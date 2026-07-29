@@ -15,6 +15,37 @@ export type ConflictCandidate = {
   moveType?: string;
 };
 
+export class DuplicateMoveRequestError extends Error {
+  statusCode = 409;
+}
+
+const DUPLICATE_CHECK_MOVE_TYPES = [BookingStatus.SUBMITTED, BookingStatus.PENDING, BookingStatus.APPROVED];
+
+// A unit can only have one active Move In / Move Out request per day — residents must amend
+// their existing reservation (via the emailed edit link) instead of submitting a new one.
+export async function assertNoDuplicateMoveRequest(
+  prismaTx: Prisma.TransactionClient,
+  params: { unit: string; moveDate: Date; moveType: string }
+) {
+  if (params.moveType !== 'MOVE_IN' && params.moveType !== 'MOVE_OUT') return;
+
+  const existing = await prismaTx.booking.findFirst({
+    where: {
+      unit: { equals: params.unit.trim(), mode: 'insensitive' },
+      moveType: { in: ['MOVE_IN', 'MOVE_OUT'] },
+      moveDate: params.moveDate,
+      status: { in: DUPLICATE_CHECK_MOVE_TYPES },
+    },
+  });
+
+  if (existing) {
+    throw new DuplicateMoveRequestError(
+      `Unit ${params.unit} already has an active Move In/Move Out request for this date. ` +
+      `To change it, use the manage-booking link from your confirmation email. If you can't find it:`
+    );
+  }
+}
+
 export function validateMoveHours(startDatetime: Date, endDatetime: Date) {
   const start = dayjs(startDatetime);
   const end = dayjs(endDatetime);

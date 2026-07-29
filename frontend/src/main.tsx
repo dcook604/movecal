@@ -5,6 +5,7 @@ import { PublicCalendarPage } from './pages/PublicCalendarPage';
 import { BookingConfirmationPage } from './pages/BookingConfirmationPage';
 import { ResidentBookingPage } from './pages/ResidentBookingPage';
 import { ResidentSubmissionPage } from './pages/ResidentSubmissionPage';
+import { FindBookingPage } from './pages/FindBookingPage';
 import { AdminPage } from './pages/AdminPage';
 import { LobbyTVPage } from './pages/LobbyTVPage';
 import { PaymentsLedgerPage } from './pages/PaymentsLedgerPage';
@@ -44,6 +45,7 @@ function App() {
       <Routes>
         <Route path="/"                element={<PublicCalendarPage />} />
         <Route path="/submit"          element={<ResidentSubmissionPage />} />
+        <Route path="/find-booking"    element={<FindBookingPage />} />
         <Route path="/booking/:id"              element={<ResidentBookingPage />} />
         <Route path="/booking/:id/confirmation" element={<BookingConfirmationPage />} />
         <Route path="/admin"           element={<AdminPage />} />
