@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useState } from 'react';
 import axios from 'axios';
 import { api, setToken } from '../api';
+import { parseBookingTime } from '../utils/bookingTime';
 import '../styles/admin.css';
 import dayjs from 'dayjs';
 
@@ -600,13 +601,10 @@ export function AdminPage() {
   }
 
   const openEditBooking = (b: any) => {
-    const dt = new Date(b.startDatetime);
-    const yr = dt.getFullYear();
-    const mo = String(dt.getMonth() + 1).padStart(2, '0');
-    const dy = String(dt.getDate()).padStart(2, '0');
-    const moveDate = `${yr}-${mo}-${dy}`;
-    const hh = String(dt.getHours()).padStart(2, '0');
-    const mm = String(dt.getMinutes()).padStart(2, '0');
+    const dt = parseBookingTime(b.startDatetime);
+    const moveDate = dt.format('YYYY-MM-DD');
+    const hh = dt.format('HH');
+    const mm = dt.format('mm');
     setEditingBookingId(b.id);
     setEditForm({
       residentName: b.residentName ?? '',
@@ -961,9 +959,9 @@ export function AdminPage() {
       {/* ── Bookings ── */}
       {(() => {
         const today = new Date(); today.setHours(0, 0, 0, 0);
-        const upcoming = bookings.filter((b) => new Date(b.startDatetime) >= today);
-        const past = bookings.filter((b) => new Date(b.startDatetime) < today)
-          .sort((a, b) => new Date(b.startDatetime).getTime() - new Date(a.startDatetime).getTime());
+        const upcoming = bookings.filter((b) => parseBookingTime(b.startDatetime).toDate() >= today);
+        const past = bookings.filter((b) => parseBookingTime(b.startDatetime).toDate() < today)
+          .sort((a, b) => parseBookingTime(b.startDatetime).valueOf() - parseBookingTime(a.startDatetime).valueOf());
 
         const qRawSlots = getSlotsForDateAndType(quickForm.moveDate, quickForm.moveType);
         const qIsHoliday = quickForm.moveDate && qRawSlots !== null && qRawSlots.length === 0;

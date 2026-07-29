@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
-import dayjs from 'dayjs';
 import { api } from '../api';
+import { parseBookingTime } from '../utils/bookingTime';
 import '../styles/resident.css';
 
 type Booking = {
@@ -105,8 +105,8 @@ export function BookingConfirmationPage() {
                 ['Resident', booking.residentName],
                 ['Unit', booking.unit],
                 ['Type', MOVE_TYPE_LABELS[booking.moveType] ?? booking.moveType],
-                ['Date', dayjs(booking.startDatetime).format('dddd, MMMM D, YYYY')],
-                ['Time', `${dayjs(booking.startDatetime).format('h:mm A')} – ${dayjs(booking.endDatetime).format('h:mm A')}`],
+                ['Date', parseBookingTime(booking.startDatetime).format('dddd, MMMM D, YYYY')],
+                ['Time', `${parseBookingTime(booking.startDatetime).format('h:mm A')} – ${parseBookingTime(booking.endDatetime).format('h:mm A')}`],
                 ['Elevator', booking.elevatorRequired ? 'Yes' : 'No'],
                 ['Loading Bay', booking.loadingBayRequired ? 'Yes' : 'No'],
                 ...(booking.notes ? [['Notes', booking.notes] as [string, string]] : []),

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import dayjs from 'dayjs';
 import { api } from '../api';
+import { parseBookingTime } from '../utils/bookingTime';
 import '../styles/resident.css';
 
 // ── Time slot definitions (mirrors backend rules) ─────────────
@@ -198,11 +199,11 @@ export function ResidentBookingPage() {
       setEditNotes(b.notes ?? '');
       setEditElevator(b.elevatorRequired);
       setEditLoadingBay(b.loadingBayRequired);
-      setEditDate(dayjs(b.startDatetime).format('YYYY-MM-DD'));
-      const existing = getSlotsForDateAndType(dayjs(b.startDatetime).format('YYYY-MM-DD'), b.moveType);
+      setEditDate(parseBookingTime(b.startDatetime).format('YYYY-MM-DD'));
+      const existing = getSlotsForDateAndType(parseBookingTime(b.startDatetime).format('YYYY-MM-DD'), b.moveType);
       const match = existing?.find(s =>
-        s.start === dayjs(b.startDatetime).format('HH:mm') &&
-        s.end === dayjs(b.endDatetime).format('HH:mm')
+        s.start === parseBookingTime(b.startDatetime).format('HH:mm') &&
+        s.end === parseBookingTime(b.endDatetime).format('HH:mm')
       );
       setEditSlot(match?.start ?? '');
     } catch (err: any) {
@@ -307,9 +308,9 @@ export function ResidentBookingPage() {
       editElevator !== booking.elevatorRequired ||
       editLoadingBay !== booking.loadingBayRequired);
 
-  const hasTimeChange = changingTime && editSlot &&
-    (editDate !== dayjs(booking?.startDatetime).format('YYYY-MM-DD') ||
-     editSlot !== dayjs(booking?.startDatetime).format('HH:mm'));
+  const hasTimeChange = changingTime && editSlot && booking &&
+    (editDate !== parseBookingTime(booking.startDatetime).format('YYYY-MM-DD') ||
+     editSlot !== parseBookingTime(booking.startDatetime).format('HH:mm'));
 
   const canSave = booking && (hasEdits || hasTimeChange);
 
@@ -400,8 +401,8 @@ export function ResidentBookingPage() {
                 ['Resident', booking.residentName],
                 ['Unit', booking.unit],
                 ['Type', booking.moveTypeLabel],
-                ['Date', dayjs(booking.startDatetime).format('dddd, MMMM D, YYYY')],
-                ['Time', `${dayjs(booking.startDatetime).format('h:mm A')} – ${dayjs(booking.endDatetime).format('h:mm A')}`],
+                ['Date', parseBookingTime(booking.startDatetime).format('dddd, MMMM D, YYYY')],
+                ['Time', `${parseBookingTime(booking.startDatetime).format('h:mm A')} – ${parseBookingTime(booking.endDatetime).format('h:mm A')}`],
               ].map(([label, value]) => (
                 <tr key={label}>
                   <td style={{ padding: '6px 12px 6px 0', color: '#555', whiteSpace: 'nowrap', verticalAlign: 'top', fontWeight: 600 }}>{label}</td>

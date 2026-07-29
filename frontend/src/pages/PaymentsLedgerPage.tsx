@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useState } from 'react';
 import axios from 'axios';
 import { api, setToken } from '../api';
+import { parseBookingTime } from '../utils/bookingTime';
 import dayjs from 'dayjs';
 import '../styles/payments.css';
 
@@ -422,7 +423,7 @@ export function PaymentsLedgerPage() {
                                     disabled={b.paymentMatched}
                                   />
                                   <span className="match-booking-info">
-                                    <strong>Unit {b.unit}</strong> — {formatMoveType(b.moveType)} — {dayjs(b.moveDate).format('MMM D, YYYY')} — {b.residentName} — <span className="match-status">{b.status}</span>
+                                    <strong>Unit {b.unit}</strong> — {formatMoveType(b.moveType)} — {parseBookingTime(b.moveDate).format('MMM D, YYYY')} — {b.residentName} — <span className="match-status">{b.status}</span>
                                     {b.paymentMatched && <span className="match-already"> (already matched)</span>}
                                   </span>
                                 </label>
