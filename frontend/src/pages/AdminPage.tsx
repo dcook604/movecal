@@ -1,5 +1,6 @@
 import { FormEvent, useEffect, useState } from 'react';
 import axios from 'axios';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { api, setToken } from '../api';
 import { parseBookingTime } from '../utils/bookingTime';
 import '../styles/admin.css';
@@ -132,6 +133,8 @@ const ROLE_LABELS: Record<string, string> = {
 };
 
 export function AdminPage() {
+  const navigate = useNavigate();
+  const location = useLocation();
   const [token, updateToken] = useState(() => localStorage.getItem('movecal_token') ?? '');
   const [role, setRole] = useState<UserRole | null>(() => {
     const storedRole = localStorage.getItem('movecal_role');
@@ -250,6 +253,8 @@ export function AdminPage() {
       if (nextRole) localStorage.setItem('movecal_role', nextRole);
       if (data.user?.mustChangePassword) setForcePasswordChange(true);
       window.dispatchEvent(new CustomEvent('movecal-auth'));
+      const redirectTo = (location.state as { from?: string } | null)?.from;
+      if (redirectTo && redirectTo !== '/admin') navigate(redirectTo, { replace: true });
     } catch (error) {
       if (axios.isAxiosError(error)) {
         if (error.response?.status === 401) {

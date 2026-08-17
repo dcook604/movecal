@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import ReactDOM from 'react-dom/client';
-import { BrowserRouter, NavLink, Route, Routes, useLocation } from 'react-router-dom';
+import { BrowserRouter, Navigate, NavLink, Route, Routes, useLocation } from 'react-router-dom';
 import { PublicCalendarPage } from './pages/PublicCalendarPage';
 import { BookingConfirmationPage } from './pages/BookingConfirmationPage';
 import { ResidentBookingPage } from './pages/ResidentBookingPage';
@@ -29,7 +29,7 @@ function Nav() {
   if (pathname === '/tv') return null;
   return (
     <nav className="site-nav">
-      <NavLink to="/">Public Calendar</NavLink>
+      <NavLink to="/">Calendar</NavLink>
       <NavLink to="/submit">Resident Submit</NavLink>
       <NavLink to="/admin">Admin</NavLink>
       {role === 'PROPERTY_MANAGER' && <NavLink to="/admin/payments">Payments</NavLink>}
@@ -38,12 +38,20 @@ function Nav() {
   );
 }
 
+function RequireAuth({ children }: { children: React.ReactElement }) {
+  const location = useLocation();
+  if (!getStoredRole()) {
+    return <Navigate to="/admin" state={{ from: location.pathname }} replace />;
+  }
+  return children;
+}
+
 function App() {
   return (
     <BrowserRouter>
       <Nav />
       <Routes>
-        <Route path="/"                element={<PublicCalendarPage />} />
+        <Route path="/"                element={<RequireAuth><PublicCalendarPage /></RequireAuth>} />
         <Route path="/submit"          element={<ResidentSubmissionPage />} />
         <Route path="/find-booking"    element={<FindBookingPage />} />
         <Route path="/booking/:id"              element={<ResidentBookingPage />} />
