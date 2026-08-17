@@ -10,13 +10,6 @@
   --tv-muted:     #94a3b8;
   --tv-accent:    #38bdf8;
 
-  --tv-move-in:         #60a5fa;
-  --tv-move-out:        #f472b6;
-  --tv-furnished-move:  #a78bfa;
-  --tv-suitcase-move:   #fb923c;
-  --tv-delivery:        #34d399;
-  --tv-reno:            #fbbf24;
-
   background: var(--tv-bg);
   color: var(--tv-text);
   font-family: 'DM Sans', -apple-system, sans-serif;
@@ -104,19 +97,12 @@
 .tv-today-card {
   border-radius: 12px;
   padding: 16px 20px;
-  border-left: 5px solid;
+  border-left: 5px solid var(--tv-accent);
   background: var(--tv-surface2);
   display: flex;
   flex-direction: column;
   gap: 6px;
 }
-
-.tv-today-card.move-in         { border-left-color: var(--tv-move-in);  }
-.tv-today-card.move-out        { border-left-color: var(--tv-move-out); }
-.tv-today-card.furnished-move  { border-left-color: var(--tv-furnished-move); }
-.tv-today-card.suitcase-move   { border-left-color: var(--tv-suitcase-move); }
-.tv-today-card.delivery        { border-left-color: var(--tv-delivery); }
-.tv-today-card.reno            { border-left-color: var(--tv-reno);     }
 
 .tv-card-header {
   display: flex;
@@ -143,6 +129,8 @@
   flex-shrink: 0;
 }
 
+.tv-card-type { color: var(--tv-accent); }
+
 .tv-status-badge.is-active {
   background: rgba(34, 197, 94, 0.2);
   color: #22c55e;
@@ -154,12 +142,6 @@
   color: var(--tv-muted);
   border: 1px solid rgba(148, 163, 184, 0.25);
 }
-.tv-today-card.move-in         .tv-card-type { color: var(--tv-move-in);  }
-.tv-today-card.move-out        .tv-card-type { color: var(--tv-move-out); }
-.tv-today-card.furnished-move  .tv-card-type { color: var(--tv-furnished-move); }
-.tv-today-card.suitcase-move   .tv-card-type { color: var(--tv-suitcase-move); }
-.tv-today-card.delivery        .tv-card-type { color: var(--tv-delivery); }
-.tv-today-card.reno            .tv-card-type { color: var(--tv-reno);     }
 
 .tv-card-unit {
   font-size: 1.5rem;
@@ -253,13 +235,8 @@
   letter-spacing: 0.06em;
   white-space: nowrap;
   color: #0f172a;
+  background: var(--tv-accent);
 }
-.tv-upcoming-badge.move-in         { background: var(--tv-move-in);  }
-.tv-upcoming-badge.move-out        { background: var(--tv-move-out); }
-.tv-upcoming-badge.furnished-move  { background: var(--tv-furnished-move); }
-.tv-upcoming-badge.suitcase-move   { background: var(--tv-suitcase-move); }
-.tv-upcoming-badge.delivery        { background: var(--tv-delivery); }
-.tv-upcoming-badge.reno            { background: var(--tv-reno);     }
 
 /* ── Today card status states ────────────────────────────────── */
 .tv-today-card.is-active {

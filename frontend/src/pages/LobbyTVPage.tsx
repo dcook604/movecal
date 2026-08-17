@@ -11,28 +11,14 @@ type PublicBooking = {
   endDatetime: string;
 };
 
-const TYPE_LABELS: Record<string, string> = {
-  MOVE_IN: 'Move In',
-  MOVE_OUT: 'Move Out',
-  FURNISHED_MOVE: 'Furnished Move',
-  SUITCASE_MOVE: 'Suitcase Move',
-  DELIVERY: 'Delivery',
-  RENO: 'Renovation',
-};
+// Move type is intentionally not shown on the lobby TV for resident privacy —
+// every booking displays as a generic "Reserved" slot regardless of moveType.
+const RESERVED_LABEL = 'Reserved';
 
 // Strip the trailing 'Z' so the browser parses datetimes as wall-clock (local)
 // time rather than converting from UTC. The server stores times as UTC but the
 // values represent building-local time.
 const wall = (dt: string) => new Date(dt.replace('Z', ''));
-
-const TYPE_CLASS: Record<string, string> = {
-  MOVE_IN: 'move-in',
-  MOVE_OUT: 'move-out',
-  FURNISHED_MOVE: 'furnished-move',
-  SUITCASE_MOVE: 'suitcase-move',
-  DELIVERY: 'delivery',
-  RENO: 'reno',
-};
 
 function getBookingStatus(booking: PublicBooking, now: Date): 'completed' | 'active' | 'upcoming' {
   const start = wall(booking.startDatetime);
@@ -116,9 +102,9 @@ export function LobbyTVPage() {
             todayEvents.map((b) => {
               const status = getBookingStatus(b, now);
               return (
-                <div key={b.id} className={`tv-today-card ${TYPE_CLASS[b.moveType] || ''} is-${status}`}>
+                <div key={b.id} className={`tv-today-card is-${status}`}>
                   <div className="tv-card-header">
-                    <div className="tv-card-type">{TYPE_LABELS[b.moveType] || b.moveType}</div>
+                    <div className="tv-card-type">{RESERVED_LABEL}</div>
                     {status === 'active' && <span className="tv-status-badge is-active">In Progress</span>}
                     {status === 'completed' && <span className="tv-status-badge is-completed">✓ Done</span>}
                   </div>
@@ -154,9 +140,7 @@ export function LobbyTVPage() {
                     {dayjs(b.startDatetime.replace('Z', '')).format('h:mm A')} – {dayjs(b.endDatetime.replace('Z', '')).format('h:mm A')}
                   </div>
                 </div>
-                <span className={`tv-upcoming-badge ${TYPE_CLASS[b.moveType] || ''}`}>
-                  {TYPE_LABELS[b.moveType] || b.moveType}
-                </span>
+                <span className="tv-upcoming-badge">{RESERVED_LABEL}</span>
               </div>
             ))
           )}
