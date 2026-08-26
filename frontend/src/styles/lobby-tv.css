@@ -31,7 +31,7 @@
 }
 
 .tv-building {
-  font-size: 2rem;
+  font-size: 2.5rem;
   font-weight: 700;
   letter-spacing: -0.02em;
   color: var(--tv-text);
@@ -46,7 +46,7 @@
 }
 
 .tv-time {
-  font-size: 2.75rem;
+  font-size: 3.4375rem;
   font-weight: 700;
   line-height: 1;
   font-variant-numeric: tabular-nums;
@@ -54,7 +54,7 @@
 }
 
 .tv-date {
-  font-size: 1.125rem;
+  font-size: 1.40625rem;
   color: var(--tv-muted);
   margin-top: 4px;
 }
@@ -79,7 +79,7 @@
 }
 
 .tv-panel-heading {
-  font-size: 0.875rem;
+  font-size: 1.09375rem;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.1em;
@@ -89,7 +89,7 @@
 
 .tv-today-empty {
   color: var(--tv-muted);
-  font-size: 1.125rem;
+  font-size: 1.40625rem;
   text-align: center;
   margin-top: 40px;
 }
@@ -112,14 +112,14 @@
 }
 
 .tv-card-type {
-  font-size: 0.75rem;
+  font-size: 0.9375rem;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.08em;
 }
 
 .tv-status-badge {
-  font-size: 0.6875rem;
+  font-size: 0.859375rem;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.08em;
@@ -144,14 +144,14 @@
 }
 
 .tv-card-unit {
-  font-size: 1.5rem;
+  font-size: 1.875rem;
   font-weight: 700;
   color: var(--tv-text);
   line-height: 1;
 }
 
 .tv-card-time {
-  font-size: 0.9375rem;
+  font-size: 1.171875rem;
   color: var(--tv-muted);
   font-variant-numeric: tabular-nums;
 }
@@ -167,7 +167,7 @@
 
 .tv-upcoming-empty {
   color: var(--tv-muted);
-  font-size: 1.25rem;
+  font-size: 1.5625rem;
   text-align: center;
   margin-top: 80px;
 }
@@ -194,7 +194,7 @@
 }
 
 .tv-upcoming-day-num {
-  font-size: 2rem;
+  font-size: 2.5rem;
   font-weight: 700;
   line-height: 1;
   color: var(--tv-text);
@@ -202,7 +202,7 @@
 }
 
 .tv-upcoming-day-name {
-  font-size: 0.8125rem;
+  font-size: 1.015625rem;
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: var(--tv-muted);
@@ -216,20 +216,20 @@
 }
 
 .tv-upcoming-unit {
-  font-size: 1.5rem;
+  font-size: 1.875rem;
   font-weight: 700;
   color: var(--tv-text);
 }
 
 .tv-upcoming-detail {
-  font-size: 1rem;
+  font-size: 1.25rem;
   color: var(--tv-muted);
 }
 
 .tv-upcoming-badge {
   padding: 5px 14px;
   border-radius: 8px;
-  font-size: 0.8125rem;
+  font-size: 1.015625rem;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.06em;
@@ -286,7 +286,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  font-size: 0.875rem;
+  font-size: 1.09375rem;
   color: var(--tv-muted);
 }
 
