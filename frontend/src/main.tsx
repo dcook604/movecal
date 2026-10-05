@@ -9,6 +9,7 @@ import { FindBookingPage } from './pages/FindBookingPage';
 import { AdminPage } from './pages/AdminPage';
 import { LobbyTVPage } from './pages/LobbyTVPage';
 import { PaymentsLedgerPage } from './pages/PaymentsLedgerPage';
+import { HistoryPage } from './pages/HistoryPage';
 import './styles.css';
 
 function getStoredRole(): string | null {
@@ -32,6 +33,7 @@ function Nav() {
       <NavLink to="/">Calendar</NavLink>
       <NavLink to="/submit">Resident Submit</NavLink>
       <NavLink to="/admin">Admin</NavLink>
+      {role && <NavLink to="/admin/history">History</NavLink>}
       {role === 'PROPERTY_MANAGER' && <NavLink to="/admin/payments">Payments</NavLink>}
       <NavLink to="/tv">Lobby TV</NavLink>
     </nav>
@@ -57,6 +59,7 @@ function App() {
         <Route path="/booking/:id"              element={<ResidentBookingPage />} />
         <Route path="/booking/:id/confirmation" element={<BookingConfirmationPage />} />
         <Route path="/admin"           element={<AdminPage />} />
+        <Route path="/admin/history"   element={<RequireAuth><HistoryPage /></RequireAuth>} />
         <Route path="/admin/payments"  element={<PaymentsLedgerPage />} />
         <Route path="/tv"              element={<LobbyTVPage />} />
       </Routes>

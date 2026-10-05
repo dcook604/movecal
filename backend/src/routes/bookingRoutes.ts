@@ -6,6 +6,7 @@ import path from 'path';
 import fs from 'fs/promises';
 import { nanoid } from 'nanoid';
 import { prisma } from '../prisma.js';
+import { identityFields } from '../utils/identity.js';
 import { assertNoConflict, assertNoDuplicateMoveRequest } from '../services/conflictService.js';
 import { requireAuth, requireRole } from '../middleware/auth.js';
 import { sendEmail, sendNotificationRecipients, bookingDetailsHtml, emailWrapper, sendPaymentConfirmationToDcook, sendPaymentReminderEmail } from '../services/emailService.js';
@@ -119,6 +120,7 @@ export async function bookingRoutes(app: FastifyInstance) {
           loadingBayRequired: body.loadingBayRequired,
           notes: body.notes,
           publicUnitMask: body.publicUnitMask,
+          ...identityFields(body),
           editToken: nanoid(32),
           status: BookingStatus.SUBMITTED
         }
@@ -289,6 +291,7 @@ export async function bookingRoutes(app: FastifyInstance) {
           loadingBayRequired: body.loadingBayRequired,
           notes: body.notes,
           publicUnitMask: body.publicUnitMask,
+          ...identityFields(body),
           editToken: nanoid(32),
           status: BookingStatus.APPROVED,
           approvedById: user.id,
@@ -382,6 +385,7 @@ export async function bookingRoutes(app: FastifyInstance) {
           ...(body.notes !== undefined && { notes: body.notes }),
           ...(body.moveType !== undefined && { moveType: body.moveType }),
           ...(body.elevatorRequired !== undefined && { elevatorRequired: body.elevatorRequired }),
+          ...identityFields(body),
           ...(body.loadingBayRequired !== undefined && { loadingBayRequired: body.loadingBayRequired }),
           ...(body.status === BookingStatus.APPROVED && { approvedById: user.id, approvedAt: new Date() }),
         }

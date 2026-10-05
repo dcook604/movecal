@@ -13,6 +13,7 @@ import { config } from './config.js';
 import { publicRoutes } from './routes/publicRoutes.js';
 import { bookingRoutes } from './routes/bookingRoutes.js';
 import { adminRoutes } from './routes/adminRoutes.js';
+import { historyRoutes } from './routes/historyRoutes.js';
 import { systemRoutes } from './routes/systemRoutes.js';
 import { startInvoiceNinjaPoller } from './services/invoiceNinjaPoller.js';
 import { prisma } from './prisma.js';
@@ -98,6 +99,7 @@ if (hasFrontend) {
 await app.register(publicRoutes);
 await app.register(bookingRoutes);
 await app.register(adminRoutes);
+await app.register(historyRoutes);
 await app.register(systemRoutes);
 
 startAutoApprovalJob();

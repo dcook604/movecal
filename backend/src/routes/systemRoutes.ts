@@ -5,6 +5,7 @@ import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import { stringify } from 'csv-stringify/sync';
 import { prisma } from '../prisma.js';
+import { identityFields } from '../utils/identity.js';
 import { config } from '../config.js';
 import { assertNoConflict } from '../services/conflictService.js';
 import { requireAuth, requireRole } from '../middleware/auth.js';
@@ -215,6 +216,7 @@ export async function systemRoutes(app: FastifyInstance) {
       return tx.booking.create({
         data: {
           ...body,
+          ...identityFields(body),
           createdById: concierge.id,
           status: BookingStatus.PENDING
         }
