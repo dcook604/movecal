@@ -182,6 +182,25 @@ export async function historyRoutes(app: FastifyInstance) {
     return { results, total, page: body.page, pageSize: body.pageSize };
   });
 
+  // Full details for one booking (history "open move" view). Staff-only; the resident's edit token is never returned.
+  app.get('/api/admin/bookings/:id/details', { preHandler: [requireRole(ALL_ROLES)], config: searchRateLimit }, async (req, reply) => {
+    const id = z.string().uuid().parse((req.params as { id: string }).id);
+    const b = await prisma.booking.findUnique({
+      where: { id },
+      include: {
+        createdBy: { select: { name: true, role: true } },
+        approvedBy: { select: { name: true, role: true } },
+        documents: { select: { id: true, originalName: true, mimeType: true, uploadedAt: true }, orderBy: { uploadedAt: 'asc' } },
+        auditLogs: { select: { id: true, action: true, timestamp: true, actor: { select: { name: true } } }, orderBy: { timestamp: 'asc' } },
+      },
+    });
+    if (!b) return reply.status(404).send({ message: 'Booking not found' });
+    const approval = await prisma.moveApproval.findFirst({ where: { moveRequestId: id } });
+    const { editToken, residentEmailNorm, residentPhoneNorm, unitNorm, ...rest } = b;
+    await logAudit(prisma, req.user.id, 'VIEW_BOOKING_DETAILS', id);
+    return { ...rest, paymentMatched: !!approval, paymentInvoiceId: approval?.invoiceId ?? null };
+  });
+
   // Everything linked to one booking's resident, across units (identity drawer).
   app.get('/api/admin/bookings/:id/related', { preHandler: [requireRole(ALL_ROLES)], config: searchRateLimit }, async (req) => {
     const id = z.string().uuid().parse((req.params as { id: string }).id);
