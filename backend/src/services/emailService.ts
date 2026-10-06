@@ -1,8 +1,9 @@
 import nodemailer from 'nodemailer';
 import { MoveType, NotifyEvent, PrismaClient } from '@prisma/client';
 import dayjs from 'dayjs';
-import { decrypt } from '../utils/crypto.js';
+import { decrypt, encrypt } from '../utils/crypto.js';
 import { config } from '../config.js';
+import { escapeHtml as esc } from '../utils/security.js';
 
 // ─── Shared email template helpers ───────────────────────────────────────────
 
@@ -31,10 +32,10 @@ type BookingEmailData = {
   notes?: string | null;
 };
 
-function row(label: string, value: string) {
+function row(label: string, value: string, trustedHtml = false) {
   return `<tr>
     <td style="padding:6px 12px 6px 0;color:#555;white-space:nowrap;vertical-align:top">${label}</td>
-    <td style="padding:6px 0;color:#111;font-weight:600">${value}</td>
+    <td style="padding:6px 0;color:#111;font-weight:600">${trustedHtml ? value : esc(value)}</td>
   </tr>`;
 }
 
@@ -54,19 +55,19 @@ export function bookingDetailsHtml(b: BookingEmailData, includeContact = false, 
     ...(b.companyName ? [row('Company', b.companyName)] : []),
     ...(b.notes ? [row('Notes', b.notes)] : []),
     ...(includeContact ? [row('Email', b.residentEmail), row('Phone', b.residentPhone)] : []),
-    ...(paymentConfirmed ? [row('Payment', '<span style="color:#166534;font-weight:700">✓ Move fee confirmed paid</span>')] : [])
+    ...(paymentConfirmed ? [row('Payment', '<span style="color:#166534;font-weight:700">✓ Move fee confirmed paid</span>', true)] : [])
   ];
 
   return `<table style="border-collapse:collapse;font-family:Arial,sans-serif;font-size:14px">
     ${rows.join('\n')}
   </table>
-  <p style="font-size:12px;color:#888;margin-top:16px">Reference: ${b.id}</p>`;
+  <p style="font-size:12px;color:#888;margin-top:16px">Reference: ${esc(b.id)}</p>`;
 }
 
 export function emailWrapper(title: string, intro: string, body: string, footer?: string, manageUrl?: string): string {
   const manageButton = manageUrl
     ? `<p style="margin:24px 0;text-align:center">
-        <a href="${manageUrl}" style="display:inline-block;background:#3090d0;color:#fff;padding:14px 32px;border-radius:6px;text-decoration:none;font-weight:600;font-size:15px">
+        <a href="${esc(manageUrl)}" style="display:inline-block;background:#3090d0;color:#fff;padding:14px 32px;border-radius:6px;text-decoration:none;font-weight:600;font-size:15px">
           View / Manage Booking
         </a>
        </p>`
@@ -74,10 +75,10 @@ export function emailWrapper(title: string, intro: string, body: string, footer?
   return `<!DOCTYPE html><html><body style="margin:0;padding:0;background:#f0f4f8">
   <div style="max-width:600px;margin:32px auto;background:#fff;border-radius:8px;overflow:hidden;font-family:Arial,Helvetica,sans-serif;box-shadow:0 2px 8px rgba(0,0,0,0.08)">
     <div style="text-align:center;padding:24px 28px 12px">
-      <img src="${config.frontendOrigins[0]}/logo-email.jpg" alt="Spectrum 4" style="width:120px;height:auto;border:0" />
+      <img src="${esc(config.frontendOrigins[0])}/logo-email.jpg" alt="Spectrum 4" style="width:120px;height:auto;border:0" />
     </div>
     <div style="background:#3090d0;padding:20px 28px">
-      <h1 style="margin:0;color:#fff;font-size:20px">${title}</h1>
+      <h1 style="margin:0;color:#fff;font-size:20px">${esc(title)}</h1>
     </div>
     <div style="padding:24px 28px">
       <p style="margin-top:0;color:#333;font-size:15px;line-height:1.5">${intro}</p>
@@ -98,12 +99,18 @@ async function getTransport(prisma: PrismaClient) {
     throw new Error('SMTP settings are incomplete');
   }
 
+  // Upgrade a legacy AES-CBC (unauthenticated) stored password to AES-GCM on first use
+  const smtpPassword = decrypt(settings.smtpPasswordEncrypted);
+  if (smtpPassword && settings.smtpPasswordEncrypted && !settings.smtpPasswordEncrypted.startsWith('gcm:')) {
+    await prisma.appSetting.update({ where: { id: settings.id }, data: { smtpPasswordEncrypted: encrypt(smtpPassword) } });
+  }
+
   return {
     transport: nodemailer.createTransport({
       host: settings.smtpHost,
       port: settings.smtpPort,
       secure: settings.smtpSecure,
-      auth: settings.smtpUsername ? { user: settings.smtpUsername, pass: decrypt(settings.smtpPasswordEncrypted) } : undefined
+      auth: settings.smtpUsername ? { user: settings.smtpUsername, pass: smtpPassword } : undefined
     }),
     from: `${settings.fromName ?? 'MoveCal'} <${settings.fromEmail}>`,
     settings
@@ -164,7 +171,7 @@ export async function sendPaymentConfirmationToDcook(prisma: PrismaClient, booki
     `Payment Confirmed — ${moveLabel} for Unit ${booking.unit} on ${dateLabel}`,
     emailWrapper(
       'Payment Confirmed — Booking Approved',
-      `Payment has been received and the following booking has been confirmed. The resident (<strong>${booking.residentEmail}</strong>) has been notified of their approval.`,
+      `Payment has been received and the following booking has been confirmed. The resident (<strong>${esc(booking.residentEmail)}</strong>) has been notified of their approval.`,
       bookingDetailsHtml(booking, true, true)
     )
   );

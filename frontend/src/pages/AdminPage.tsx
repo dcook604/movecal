@@ -405,13 +405,22 @@ export function AdminPage() {
     }
   };
 
+  // Changing the password invalidates older sessions; the server returns a fresh token for this one
+  const storeRefreshedToken = (newToken?: string) => {
+    if (!newToken) return;
+    updateToken(newToken);
+    setToken(newToken);
+    localStorage.setItem('movecal_token', newToken);
+  };
+
   const changePassword = async (e: FormEvent) => {
     e.preventDefault();
     setAccountMessage('');
     if (passwordForm.newPassword !== passwordForm.confirmPassword) { setAccountMessage('New passwords do not match'); return; }
-    if (passwordForm.newPassword.length < 8) { setAccountMessage('Password must be at least 8 characters'); return; }
+    if (passwordForm.newPassword.length < 10) { setAccountMessage('Password must be at least 10 characters'); return; }
     try {
-      await api.post('/api/auth/change-password', passwordForm);
+      const res = await api.post('/api/auth/change-password', passwordForm);
+      storeRefreshedToken(res.data?.token);
       setAccountMessage('Password changed successfully');
       setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
     } catch (error: any) {
@@ -424,13 +433,14 @@ export function AdminPage() {
     e.preventDefault();
     setForcePasswordMsg('');
     if (forcePasswordForm.newPassword !== forcePasswordForm.confirmPassword) { setForcePasswordMsg('Passwords do not match'); return; }
-    if (forcePasswordForm.newPassword.length < 8) { setForcePasswordMsg('Password must be at least 8 characters'); return; }
+    if (forcePasswordForm.newPassword.length < 10) { setForcePasswordMsg('Password must be at least 10 characters'); return; }
     try {
-      await api.post('/api/auth/change-password', {
+      const res = await api.post('/api/auth/change-password', {
         currentPassword: forcePasswordForm.currentPassword,
         newPassword: forcePasswordForm.newPassword,
         confirmPassword: forcePasswordForm.confirmPassword,
       });
+      storeRefreshedToken(res.data?.token);
       setForcePasswordChange(false);
       setForcePasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
     } catch (error: any) {
@@ -528,7 +538,7 @@ export function AdminPage() {
     e.preventDefault();
     setResetMsg('');
     if (resetNewPassword !== resetConfirm) { setResetMsg('Passwords do not match.'); return; }
-    if (resetNewPassword.length < 8) { setResetMsg('Password must be at least 8 characters.'); return; }
+    if (resetNewPassword.length < 10) { setResetMsg('Password must be at least 10 characters.'); return; }
     try {
       const { data } = await api.post('/api/auth/reset-password', { token: resetToken, password: resetNewPassword });
       setResetMsg(data.message);
@@ -732,8 +742,8 @@ export function AdminPage() {
               <form onSubmit={submitPasswordReset}>
                 <div className="form-field">
                   <label htmlFor="reset-password">New Password</label>
-                  <input id="reset-password" type="password" value={resetNewPassword} onChange={(e) => setResetNewPassword(e.target.value)} minLength={8} placeholder="Minimum 8 characters" required />
-                  <small>Minimum 8 characters</small>
+                  <input id="reset-password" type="password" value={resetNewPassword} onChange={(e) => setResetNewPassword(e.target.value)} minLength={10} placeholder="Minimum 10 characters" required />
+                  <small>Minimum 10 characters</small>
                 </div>
                 <div className="form-field">
                   <label htmlFor="reset-confirm">Confirm Password</label>
@@ -775,8 +785,8 @@ export function AdminPage() {
               <div className="form-field">
                 <label htmlFor="force-new-password">New Password</label>
                 <input id="force-new-password" type="password" value={forcePasswordForm.newPassword}
-                  onChange={(e) => setForcePasswordForm({ ...forcePasswordForm, newPassword: e.target.value })} minLength={8} required />
-                <small>Minimum 8 characters</small>
+                  onChange={(e) => setForcePasswordForm({ ...forcePasswordForm, newPassword: e.target.value })} minLength={10} required />
+                <small>Minimum 10 characters</small>
               </div>
               <div className="form-field">
                 <label htmlFor="force-confirm-password">Confirm New Password</label>
@@ -927,8 +937,8 @@ export function AdminPage() {
               <div className="form-field">
                 <label htmlFor="new-password">New Password</label>
                 <input id="new-password" type="password" value={passwordForm.newPassword}
-                  onChange={(e) => setPasswordForm({ ...passwordForm, newPassword: e.target.value })} minLength={8} required />
-                <small>Minimum 8 characters</small>
+                  onChange={(e) => setPasswordForm({ ...passwordForm, newPassword: e.target.value })} minLength={10} required />
+                <small>Minimum 10 characters</small>
               </div>
               <div className="form-field">
                 <label htmlFor="confirm-password">Confirm New Password</label>
@@ -1340,9 +1350,9 @@ export function AdminPage() {
                 </div>
                 <div className="form-field">
                   <label htmlFor="user-password" className="required">Password</label>
-                  <input id="user-password" type="password" placeholder="Minimum 8 characters" value={userForm.password}
-                    onChange={(e) => setUserForm({ ...userForm, password: e.target.value })} minLength={8} required />
-                  <small>Minimum 8 characters</small>
+                  <input id="user-password" type="password" placeholder="Minimum 10 characters" value={userForm.password}
+                    onChange={(e) => setUserForm({ ...userForm, password: e.target.value })} minLength={10} required />
+                  <small>Minimum 10 characters</small>
                 </div>
                 <div className="form-field">
                   <label htmlFor="user-role" className="required">Access Level</label>

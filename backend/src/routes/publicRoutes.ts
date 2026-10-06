@@ -7,10 +7,15 @@ import { assertNoConflict } from '../services/conflictService.js';
 import { validateMoveTime } from '../utils/moveTimeValidator.js';
 import { config } from '../config.js';
 import dayjs from 'dayjs';
+import { escapeHtml as esc, safeEqual } from '../utils/security.js';
 
 export async function publicRoutes(app: FastifyInstance) {
   app.get('/api/public/taken-slots', async (req) => {
-    const { date, excludeId } = req.query as { date?: string; excludeId?: string };
+    const query = z.object({
+      date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+      excludeId: z.string().uuid().optional(),
+    }).parse(req.query);
+    const { date, excludeId } = query;
     if (!date) return [];
     const dayStart = new Date(`${date}T00:00:00`);
     const dayEnd   = new Date(`${date}T23:59:59`);
@@ -94,9 +99,9 @@ export async function publicRoutes(app: FastifyInstance) {
     if (bookings.length === 0) return okMsg;
 
     const linkItems = bookings.map((b) => {
-      const moveLabel = MOVE_TYPE_LABELS[b.moveType] ?? b.moveType;
+      const moveLabel = esc(MOVE_TYPE_LABELS[b.moveType] ?? b.moveType);
       const manageUrl = `${config.frontendOrigins[0]}/booking/${b.id}?token=${b.editToken}`;
-      return `<li style="margin-bottom:8px"><strong>${moveLabel}</strong> — ${dayjs(b.startDatetime).format('MMM D, YYYY, h:mm A')} — <a href="${manageUrl}">Manage this booking</a></li>`;
+      return `<li style="margin-bottom:8px"><strong>${moveLabel}</strong> — ${dayjs(b.startDatetime).format('MMM D, YYYY, h:mm A')} — <a href="${esc(manageUrl)}">Manage this booking</a></li>`;
     }).join('');
 
     const plural = bookings.length > 1 ? 's' : '';
@@ -106,7 +111,7 @@ export async function publicRoutes(app: FastifyInstance) {
       `Your MoveCal Booking Link${plural} — Unit ${body.unit}`,
       emailWrapper(
         `Your Booking Management Link${plural}`,
-        `You requested access to your booking(s) for Unit ${body.unit}. Use the link(s) below to view or make changes to your reservation.`,
+        `You requested access to your booking(s) for Unit ${esc(body.unit)}. Use the link(s) below to view or make changes to your reservation.`,
         `<ul style="padding-left:20px;line-height:1.6;margin:0">${linkItems}</ul>`
       )
     ).catch((err) => {
@@ -116,21 +121,26 @@ export async function publicRoutes(app: FastifyInstance) {
     return okMsg;
   });
 
+  // Management links stop working 30 days after the booking ends
+  const TOKEN_GRACE_MS = 30 * 24 * 60 * 60 * 1000;
+  async function loadBookingByToken(id: string, token?: string) {
+    if (!token) return null;
+    const booking = await prisma.booking.findUnique({ where: { id } });
+    if (!booking || !booking.editToken || !safeEqual(booking.editToken, token)) return null;
+    if (Date.now() - booking.endDatetime.getTime() > TOKEN_GRACE_MS) return null;
+    return booking;
+  }
+  const tokenRateLimit = { rateLimit: { max: 30, timeWindow: '15 minutes' } };
+
   // GET resident's booking (token-gated)
-  app.get('/api/public/bookings/:id', async (req, reply) => {
-    const { id } = req.params as { id: string };
+  app.get('/api/public/bookings/:id', { config: tokenRateLimit }, async (req, reply) => {
+    const { id } = z.object({ id: z.string().uuid() }).parse(req.params);
     const { token } = req.query as { token?: string };
 
-    if (!token) {
-      return reply.status(401).send({ message: 'Token is required' });
-    }
-
-    const booking = await prisma.booking.findUnique({ where: { id } });
+    const booking = await loadBookingByToken(id, token);
     if (!booking) {
+      // Same response whether the booking is missing or the token is wrong
       return reply.status(404).send({ message: 'Booking not found' });
-    }
-    if (booking.editToken !== token) {
-      return reply.status(403).send({ message: 'Invalid token' });
     }
 
     return bookingToResponse(booking);
@@ -146,20 +156,14 @@ export async function publicRoutes(app: FastifyInstance) {
     endDatetime: z.coerce.date().optional(),
   });
 
-  app.patch('/api/public/bookings/:id', async (req, reply) => {
-    const { id } = req.params as { id: string };
+  app.patch('/api/public/bookings/:id', { config: tokenRateLimit }, async (req, reply) => {
+    const { id } = z.object({ id: z.string().uuid() }).parse(req.params);
     const { token } = req.query as { token?: string };
 
-    if (!token) {
-      return reply.status(401).send({ message: 'Token is required' });
-    }
-
-    const booking = await prisma.booking.findUnique({ where: { id } });
+    const booking = await loadBookingByToken(id, token);
     if (!booking) {
+      // Same response whether the booking is missing or the token is wrong
       return reply.status(404).send({ message: 'Booking not found' });
-    }
-    if (booking.editToken !== token) {
-      return reply.status(403).send({ message: 'Invalid token' });
     }
 
     // Can't modify cancelled or rejected bookings
@@ -241,7 +245,7 @@ export async function publicRoutes(app: FastifyInstance) {
       subject,
       emailWrapper(
         'Booking Updated by Resident',
-        `The resident (${updated.residentEmail}) has updated their booking. The changes have been applied automatically.`,
+        `The resident (${esc(updated.residentEmail)}) has updated their booking. The changes have been applied automatically.`,
         bookingDetailsHtml(updated, true)
       )
     ).catch((err) => {
@@ -250,20 +254,14 @@ export async function publicRoutes(app: FastifyInstance) {
   }
 
   // POST cancel booking (token-gated)
-  app.post('/api/public/bookings/:id/cancel', async (req, reply) => {
-    const { id } = req.params as { id: string };
+  app.post('/api/public/bookings/:id/cancel', { config: tokenRateLimit }, async (req, reply) => {
+    const { id } = z.object({ id: z.string().uuid() }).parse(req.params);
     const { token } = req.query as { token?: string };
 
-    if (!token) {
-      return reply.status(401).send({ message: 'Token is required' });
-    }
-
-    const booking = await prisma.booking.findUnique({ where: { id } });
+    const booking = await loadBookingByToken(id, token);
     if (!booking) {
+      // Same response whether the booking is missing or the token is wrong
       return reply.status(404).send({ message: 'Booking not found' });
-    }
-    if (booking.editToken !== token) {
-      return reply.status(403).send({ message: 'Invalid token' });
     }
 
     if (booking.status === BookingStatus.CANCELLED) {
@@ -287,7 +285,7 @@ export async function publicRoutes(app: FastifyInstance) {
       subject,
       emailWrapper(
         'Booking Cancelled',
-        `The resident (${updated.residentEmail}) has cancelled their booking.`,
+        `The resident (${esc(updated.residentEmail)}) has cancelled their booking.`,
         bookingDetailsHtml(updated, true)
       )
     ).catch((err) => {

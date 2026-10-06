@@ -85,7 +85,8 @@ const quickEntrySchema = createSchema.extend({
 const uuidSchema = z.string().uuid();
 
 export async function bookingRoutes(app: FastifyInstance) {
-  app.post('/api/bookings', async (req, reply) => {
+  // Public submissions send email to the supplied address, so keep them tightly limited
+  app.post('/api/bookings', { config: { rateLimit: { max: 10, timeWindow: '15 minutes' } } }, async (req, reply) => {
     const body = createSchema.parse(req.body);
 
     // Validate move time restrictions
@@ -318,7 +319,7 @@ export async function bookingRoutes(app: FastifyInstance) {
       const approvalByBooking = new Map(approvals.map(a => [a.moveRequestId, a]));
       return bookings.map(b => {
         const approval = approvalByBooking.get(b.id);
-        return { ...b, paymentMatched: !!approval, paymentInvoiceId: approval?.invoiceId ?? null };
+        return { ...b, documents: b.documents.map(({ storagePath: _p, ...d }) => d), paymentMatched: !!approval, paymentInvoiceId: approval?.invoiceId ?? null };
       });
     }
   );
@@ -528,21 +529,53 @@ export async function bookingRoutes(app: FastifyInstance) {
     return { message: 'Payment reminder sent.' };
   });
 
-  app.post('/api/admin/bookings/:id/documents', { preHandler: [requireRole([UserRole.CONCIERGE, UserRole.COUNCIL, UserRole.PROPERTY_MANAGER])] }, async (req) => {
-    const data = await req.file();
-    if (!data) throw new Error('No file');
-    const allowedMime = new Set(['application/pdf', 'image/jpeg', 'image/png']);
-    if (!allowedMime.has(data.mimetype)) {
-      throw new Error('Unsupported file type');
-    }
+  // Verify the real file type from its leading bytes; the client-declared MIME type is not trusted.
+  function detectFileType(buf: Buffer): { mime: string; ext: string } | null {
+    if (buf.length >= 5 && buf.subarray(0, 5).toString('latin1') === '%PDF-') return { mime: 'application/pdf', ext: '.pdf' };
+    if (buf.length >= 3 && buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) return { mime: 'image/jpeg', ext: '.jpg' };
+    if (buf.length >= 8 && buf.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) return { mime: 'image/png', ext: '.png' };
+    return null;
+  }
+
+  app.post('/api/admin/bookings/:id/documents', { preHandler: [requireRole([UserRole.CONCIERGE, UserRole.COUNCIL, UserRole.PROPERTY_MANAGER])] }, async (req, reply) => {
     const id = uuidSchema.parse((req.params as { id: string }).id);
+    const booking = await prisma.booking.findUnique({ where: { id }, select: { id: true } });
+    if (!booking) return reply.status(404).send({ message: 'Booking not found' });
+
+    const data = await req.file();
+    if (!data) return reply.status(400).send({ message: 'No file uploaded' });
+    const buffer = await data.toBuffer();
+    const detected = detectFileType(buffer);
+    if (!detected) return reply.status(400).send({ message: 'Unsupported file type. Only PDF, JPEG and PNG are allowed.' });
+
     const uploadsRoot = path.resolve(config.uploadsDir);
     await fs.mkdir(uploadsRoot, { recursive: true });
-    const safeName = path.basename(data.filename);
-    const ext = path.extname(safeName);
-    const name = `${Date.now()}-${nanoid(8)}${ext}`;
+    // Stored name and extension are generated server-side from the verified type
+    const name = `${Date.now()}-${nanoid(16)}${detected.ext}`;
     const storagePath = path.join(uploadsRoot, name);
-    await fs.writeFile(storagePath, await data.toBuffer());
-    return prisma.document.create({ data: { bookingId: id, originalName: safeName, storagePath, mimeType: data.mimetype } });
+    await fs.writeFile(storagePath, buffer, { mode: 0o600 });
+    const originalName = path.basename(data.filename).replace(/[^\w.\- ]/g, '_').slice(0, 200);
+    const doc = await prisma.document.create({ data: { bookingId: id, originalName, storagePath: name, mimeType: detected.mime } });
+    await logAudit(prisma, req.user.id, 'DOCUMENT_UPLOADED' as any, id, { documentId: doc.id });
+    const { storagePath: _omit, ...safe } = doc;
+    return safe;
+  });
+
+  app.get('/api/admin/documents/:id', { preHandler: [requireRole([UserRole.CONCIERGE, UserRole.COUNCIL, UserRole.PROPERTY_MANAGER])] }, async (req, reply) => {
+    const id = uuidSchema.parse((req.params as { id: string }).id);
+    const doc = await prisma.document.findUnique({ where: { id } });
+    if (!doc) return reply.status(404).send({ message: 'Document not found' });
+    const uploadsRoot = path.resolve(config.uploadsDir);
+    // storagePath may be a bare file name (new) or an absolute path (legacy); either way it must stay inside the uploads dir
+    const resolved = path.resolve(uploadsRoot, doc.storagePath);
+    if (!resolved.startsWith(uploadsRoot + path.sep)) return reply.status(404).send({ message: 'Document not found' });
+    const file = await fs.readFile(resolved).catch(() => null);
+    if (!file) return reply.status(404).send({ message: 'Document not found' });
+    return reply
+      .header('Content-Type', doc.mimeType)
+      .header('X-Content-Type-Options', 'nosniff')
+      .header('Content-Disposition', `attachment; filename="${doc.originalName.replace(/[^\w.\- ]/g, '_')}"`)
+      .header('Cache-Control', 'private, no-store')
+      .send(file);
   });
 }

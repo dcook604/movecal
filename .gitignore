@@ -41,3 +41,6 @@ uploads/
 # Testing
 coverage/
 .nyc_output/
+
+# TypeScript incremental build info
+*.tsbuildinfo

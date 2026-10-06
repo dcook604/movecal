@@ -67,7 +67,7 @@ export const config = {
   env: env.NODE_ENV,
   port: Number(env.PORT ?? 4000),
   jwtSecret: env.JWT_SECRET ?? 'dev-secret',
-  encryptionKey: env.SETTINGS_ENCRYPTION_KEY ?? '0123456789abcdef0123456789abcdef',
+  encryptionKey: env.SETTINGS_ENCRYPTION_KEY ?? '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
   intakeSecret: env.INTAKE_SHARED_SECRET ?? 'dev-intake-secret',
   uploadsDir: env.UPLOADS_DIR ?? 'uploads',
   frontendOrigins,

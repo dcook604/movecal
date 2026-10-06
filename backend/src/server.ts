@@ -1,7 +1,5 @@
 import Fastify from 'fastify';
-import cookie from '@fastify/cookie';
 import cors from '@fastify/cors';
-import csrf from '@fastify/csrf-protection';
 import jwt from '@fastify/jwt';
 import helmet from '@fastify/helmet';
 import multipart from '@fastify/multipart';
@@ -21,11 +19,11 @@ import { startAutoApprovalJob } from './services/autoApprovalService.js';
 import { startPaymentReminderJob } from './services/paymentReminderService.js';
 import { ZodError } from 'zod';
 
-const app = Fastify({ logger: true, bodyLimit: 2 * 1024 * 1024, trustProxy: true });
+const app = Fastify({ logger: true, bodyLimit: 2 * 1024 * 1024, trustProxy: (_addr: string, hop: number) => hop < 1 });
 
 app.setErrorHandler((error, _req, reply) => {
   if (error instanceof ZodError) {
-    return reply.status(400).send({ message: 'Validation error', issues: error.issues });
+    return reply.status(400).send({ message: 'Validation error', issues: error.issues.map((i) => ({ path: i.path, message: i.message })) });
   }
   const err = error as Error & { statusCode?: number };
   const statusCode = err.statusCode ?? 500;
@@ -38,25 +36,23 @@ await app.register(helmet, {
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
-      scriptSrc: ["'self'", "'unsafe-inline'"], // Vite requires unsafe-inline for dev
+      scriptSrc: config.env === 'production' ? ["'self'"] : ["'self'", "'unsafe-inline'"], // Vite dev server needs inline scripts
       styleSrc: ["'self'", "'unsafe-inline'"],
       imgSrc: ["'self'", "data:"],
       connectSrc: ["'self'"],
       fontSrc: ["'self'"],
       objectSrc: ["'none'"],
       mediaSrc: ["'self'"],
-      frameSrc: ["'none'"]
+      frameSrc: ["'none'"],
+      frameAncestors: ["'none'"],
+      baseUri: ["'self'"],
+      formAction: ["'self'"]
     }
   }
 });
 
-// Register cookie plugin (required for CSRF)
-await app.register(cookie, { secret: config.jwtSecret });
-
-// Register CSRF protection for state-changing operations
-await app.register(csrf, {
-  cookieOpts: { signed: true, sameSite: 'strict' }
-});
+// Auth uses a Bearer token in the Authorization header (not cookies), so requests are not
+// CSRF-able and no CSRF plugin is needed.
 
 await app.register(rateLimit, { global: true, max: 300, timeWindow: '1 minute' });
 
@@ -68,17 +64,9 @@ if (config.env === 'development') {
 await app.register(jwt, { secret: config.jwtSecret, sign: { expiresIn: '12h' } });
 await app.register(multipart, { limits: { fileSize: 10 * 1024 * 1024, files: 1 } });
 
-const uploadsRoot = path.resolve(config.uploadsDir);
-await fs.mkdir(uploadsRoot, { recursive: true });
-await app.register(staticPlugin, {
-  root: uploadsRoot,
-  prefix: '/uploads/',
-  decorateReply: false,
-  setHeaders: (res, filePath) => {
-    res.setHeader('X-Content-Type-Options', 'nosniff');
-    res.setHeader('Content-Disposition', `attachment; filename="${path.basename(filePath)}"`);
-  }
-});
+// Uploaded documents are private: they are only served through the authenticated
+// /api/admin/documents/:id route, never as public static files.
+await fs.mkdir(path.resolve(config.uploadsDir), { recursive: true });
 
 const frontendDist = path.resolve('frontend', 'dist');
 const hasFrontend = await fs
@@ -89,7 +77,7 @@ const hasFrontend = await fs
 if (hasFrontend) {
   await app.register(staticPlugin, { root: frontendDist, prefix: '/' });
   app.setNotFoundHandler(async (req, reply) => {
-    if (req.raw.url?.startsWith('/api') || req.raw.url?.startsWith('/uploads/')) {
+    if (req.raw.url?.startsWith('/api') || req.raw.url?.startsWith('/uploads')) {
       return reply.status(404).send({ message: 'Not Found' });
     }
     return reply.sendFile('index.html');

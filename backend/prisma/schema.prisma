@@ -44,6 +44,7 @@ model User {
   role         UserRole
   passwordHash       String    @map("password_hash")
   mustChangePassword Boolean   @default(false) @map("must_change_password")
+  passwordChangedAt  DateTime? @map("password_changed_at")
   createdAt          DateTime  @default(now()) @map("created_at")
   bookings     Booking[]  @relation("CreatedBookings")
   approvals    Booking[]  @relation("ApprovedBookings")

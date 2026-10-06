@@ -11,19 +11,20 @@ import { assertNoConflict } from '../services/conflictService.js';
 import { requireAuth, requireRole } from '../middleware/auth.js';
 import { validateMoveTime } from '../utils/moveTimeValidator.js';
 import { sendEmail, emailWrapper } from '../services/emailService.js';
+import { BCRYPT_ROUNDS, DUMMY_PASSWORD_HASH, MIN_PASSWORD_LENGTH, safeEqual, sha256Hex, escapeHtml } from '../utils/security.js';
 
 const intakeSchema = z.object({
-  residentName: z.string().min(1),
-  residentEmail: z.string().email(),
-  residentPhone: z.string().min(1),
-  unit: z.string().min(1),
+  residentName: z.string().min(1).max(200),
+  residentEmail: z.string().email().max(320),
+  residentPhone: z.string().min(1).max(50),
+  unit: z.string().min(1).max(20),
   moveType: z.nativeEnum(MoveType),
   moveDate: z.coerce.date(),
   startDatetime: z.coerce.date(),
   endDatetime: z.coerce.date(),
   elevatorRequired: z.boolean(),
   loadingBayRequired: z.boolean(),
-  notes: z.string().optional()
+  notes: z.string().max(2000).optional()
 });
 
 function sanitizeCsvValue(value: string) {
@@ -46,7 +47,9 @@ export async function systemRoutes(app: FastifyInstance) {
     const body = z.object({ email: z.string().email(), password: z.string().min(1) }).parse(req.body);
     const normalizedEmail = body.email.trim().toLowerCase();
     const user = await prisma.user.findUnique({ where: { email: normalizedEmail } });
-    if (!user || !(await bcrypt.compare(body.password, user.passwordHash))) {
+    // Always run a bcrypt compare so response time doesn't reveal whether the email exists
+    const passwordOk = await bcrypt.compare(body.password, user?.passwordHash ?? DUMMY_PASSWORD_HASH);
+    if (!user || !passwordOk) {
       return reply.status(401).send({ message: 'Invalid credentials' });
     }
     const token = await reply.jwtSign({ id: user.id, role: user.role, email: user.email, name: user.name, mustChangePassword: user.mustChangePassword });
@@ -57,7 +60,7 @@ export async function systemRoutes(app: FastifyInstance) {
   app.post('/api/auth/change-password', { preHandler: [requireAuth] }, async (req, reply) => {
     const body = z.object({
       currentPassword: z.string().min(1),
-      newPassword: z.string().min(8, 'Password must be at least 8 characters'),
+      newPassword: z.string().min(MIN_PASSWORD_LENGTH, `Password must be at least ${MIN_PASSWORD_LENGTH} characters`).max(200),
       confirmPassword: z.string().min(1)
     }).parse(req.body);
 
@@ -75,15 +78,17 @@ export async function systemRoutes(app: FastifyInstance) {
     }
 
     // Hash new password
-    const newPasswordHash = await bcrypt.hash(body.newPassword, 10);
+    const newPasswordHash = await bcrypt.hash(body.newPassword, BCRYPT_ROUNDS);
 
     // Update password and clear any forced-change flag
     await prisma.user.update({
       where: { id: user.id },
-      data: { passwordHash: newPasswordHash, mustChangePassword: false }
+      data: { passwordHash: newPasswordHash, mustChangePassword: false, passwordChangedAt: new Date() }
     });
 
-    return { message: 'Password changed successfully' };
+    // Older sessions are now invalid; hand back a fresh token for this one
+    const token = await reply.jwtSign({ id: user.id, role: user.role, email: user.email, name: user.name, mustChangePassword: false });
+    return { message: 'Password changed successfully', token };
   });
 
   // Change email endpoint
@@ -119,7 +124,8 @@ export async function systemRoutes(app: FastifyInstance) {
       id: user.id,
       role: user.role,
       email: normalizedEmail,
-      name: user.name
+      name: user.name,
+      mustChangePassword: user.mustChangePassword
     });
 
     return {
@@ -147,7 +153,8 @@ export async function systemRoutes(app: FastifyInstance) {
 
     const token = crypto.randomBytes(32).toString('hex');
     const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
-    await prisma.passwordResetToken.create({ data: { userId: user.id, token, expiresAt } });
+    // Only a hash is stored so a database leak can't be used to take over accounts
+    await prisma.passwordResetToken.create({ data: { userId: user.id, token: sha256Hex(token), expiresAt } });
 
     const origin = (req.headers.origin as string | undefined) ?? '';
     const allowedOrigin = config.frontendOrigins?.includes(origin) ? origin : config.frontendOrigins?.[0] ?? '';
@@ -161,7 +168,7 @@ export async function systemRoutes(app: FastifyInstance) {
         'Reset Your Password',
         'You requested a password reset for your MoveCal account. Click the button below to set a new password. This link expires in 1 hour.',
         `<p style="margin:24px 0">
-          <a href="${resetLink}" style="background:#1a1a2e;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:600;font-size:15px">
+          <a href="${escapeHtml(resetLink)}" style="background:#1a1a2e;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:600;font-size:15px">
             Reset Password
           </a>
         </p>
@@ -173,22 +180,24 @@ export async function systemRoutes(app: FastifyInstance) {
   });
 
   // Reset password using a valid token
-  app.post('/api/auth/reset-password', async (req, reply) => {
+  app.post('/api/auth/reset-password', {
+    config: { rateLimit: { max: 10, timeWindow: '15 minutes' } }
+  }, async (req, reply) => {
     const body = z.object({
       token: z.string().min(1),
-      password: z.string().min(8, 'Password must be at least 8 characters')
+      password: z.string().min(MIN_PASSWORD_LENGTH, `Password must be at least ${MIN_PASSWORD_LENGTH} characters`).max(200)
     }).parse(req.body);
 
-    const resetToken = await prisma.passwordResetToken.findUnique({ where: { token: body.token } });
+    const resetToken = await prisma.passwordResetToken.findUnique({ where: { token: sha256Hex(body.token) } });
 
     if (!resetToken || resetToken.usedAt || resetToken.expiresAt < new Date()) {
       return reply.status(400).send({ message: 'Reset link is invalid or has expired.' });
     }
 
-    const passwordHash = await bcrypt.hash(body.password, 10);
+    const passwordHash = await bcrypt.hash(body.password, BCRYPT_ROUNDS);
 
     await prisma.$transaction([
-      prisma.user.update({ where: { id: resetToken.userId }, data: { passwordHash } }),
+      prisma.user.update({ where: { id: resetToken.userId }, data: { passwordHash, passwordChangedAt: new Date() } }),
       prisma.passwordResetToken.update({ where: { id: resetToken.id }, data: { usedAt: new Date() } })
     ]);
 
@@ -197,7 +206,7 @@ export async function systemRoutes(app: FastifyInstance) {
 
   app.post('/api/intake/email', async (req, reply) => {
     const secret = req.headers['x-intake-secret'];
-    if (secret !== config.intakeSecret) return reply.status(401).send({ message: 'Invalid secret' });
+    if (typeof secret !== 'string' || !safeEqual(secret, config.intakeSecret)) return reply.status(401).send({ message: 'Invalid secret' });
     const body = intakeSchema.parse(req.body);
 
     // Validate move time restrictions

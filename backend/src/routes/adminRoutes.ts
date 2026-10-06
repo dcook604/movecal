@@ -7,6 +7,7 @@ import { requireRole } from '../middleware/auth.js';
 import { encrypt } from '../utils/crypto.js';
 import { sendEmail, sendPaymentConfirmationToDcook } from '../services/emailService.js';
 import { logAudit } from '../services/auditService.js';
+import { BCRYPT_ROUNDS, MIN_PASSWORD_LENGTH } from '../utils/security.js';
 import { checkAndApproveMoveRequest } from '../services/moveApprovalService.js';
 
 export async function adminRoutes(app: FastifyInstance) {
@@ -75,12 +76,12 @@ export async function adminRoutes(app: FastifyInstance) {
   });
   app.patch('/api/admin/recipients/:id', { preHandler: [requireRole([UserRole.COUNCIL, UserRole.PROPERTY_MANAGER])] }, async (req) => {
     const body = z.object({ name: z.string().optional(), email: z.string().email().optional(), enabled: z.boolean().optional(), notifyOn: z.array(z.nativeEnum(NotifyEvent)).optional() }).parse(req.body);
-    const r = await prisma.notificationRecipient.update({ where: { id: (req.params as any).id }, data: body });
+    const r = await prisma.notificationRecipient.update({ where: { id: z.string().uuid().parse((req.params as any).id) }, data: body });
     await logAudit(prisma, req.user.id, 'RECIPIENT_UPDATED', undefined, { recipientId: r.id });
     return r;
   });
   app.delete('/api/admin/recipients/:id', { preHandler: [requireRole([UserRole.COUNCIL, UserRole.PROPERTY_MANAGER])] }, async (req) => {
-    const id = (req.params as any).id;
+    const id = z.string().uuid().parse((req.params as any).id);
     await prisma.notificationRecipient.delete({ where: { id } });
     await logAudit(prisma, req.user.id, 'RECIPIENT_DELETED', undefined, { recipientId: id });
     return { ok: true };
@@ -109,7 +110,7 @@ export async function adminRoutes(app: FastifyInstance) {
     const body = z.object({
       name: z.string().min(1).max(200),
       email: z.string().email().max(320),
-      password: z.string().min(8, 'Password must be at least 8 characters'),
+      password: z.string().min(MIN_PASSWORD_LENGTH, `Password must be at least ${MIN_PASSWORD_LENGTH} characters`).max(200),
       role: z.nativeEnum(UserRole)
     }).parse(req.body);
 
@@ -122,7 +123,7 @@ export async function adminRoutes(app: FastifyInstance) {
     }
 
     // Hash password
-    const passwordHash = await bcrypt.hash(body.password, 10);
+    const passwordHash = await bcrypt.hash(body.password, BCRYPT_ROUNDS);
 
     // Create user
     const user = await prisma.user.create({
@@ -157,7 +158,7 @@ export async function adminRoutes(app: FastifyInstance) {
       name: z.string().min(1).max(200).optional(),
       email: z.string().email().max(320).optional(),
       role: z.nativeEnum(UserRole).optional(),
-      password: z.string().min(8).optional(),
+      password: z.string().min(MIN_PASSWORD_LENGTH).max(200).optional(),
       mustChangePassword: z.boolean().optional()
     }).parse(req.body);
 
@@ -184,7 +185,8 @@ export async function adminRoutes(app: FastifyInstance) {
     }
 
     if (body.password) {
-      updateData.passwordHash = await bcrypt.hash(body.password, 10);
+      updateData.passwordHash = await bcrypt.hash(body.password, BCRYPT_ROUNDS);
+      updateData.passwordChangedAt = new Date();
       // When admin explicitly sets a new password, respect the mustChangePassword toggle
       // (handled below); don't auto-clear it here
     }
