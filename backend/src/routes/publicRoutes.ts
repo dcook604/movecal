@@ -3,7 +3,7 @@ import { BookingStatus, NotifyEvent } from '@prisma/client';
 import { z } from 'zod';
 import { prisma } from '../prisma.js';
 import { sendNotificationRecipients, sendEmail, bookingDetailsHtml, emailWrapper } from '../services/emailService.js';
-import { assertNoConflict } from '../services/conflictService.js';
+import { assertNoConflict, assertNoDuplicateMoveRequest } from '../services/conflictService.js';
 import { validateMoveTime } from '../utils/moveTimeValidator.js';
 import { config } from '../config.js';
 import dayjs from 'dayjs';
@@ -191,6 +191,12 @@ export async function publicRoutes(app: FastifyInstance) {
 
       // Check for conflicts within a transaction
       const updated = await prisma.$transaction(async (tx) => {
+        await assertNoDuplicateMoveRequest(tx, {
+          unit: booking.unit,
+          moveDate: body.moveDate ?? booking.moveDate,
+          moveType: booking.moveType as string,
+          excludeId: booking.id,
+        });
         await assertNoConflict(
           tx,
           {

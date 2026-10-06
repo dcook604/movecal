@@ -270,6 +270,7 @@ export async function bookingRoutes(app: FastifyInstance) {
     }
 
     const booking = await prisma.$transaction(async (tx) => {
+      await assertNoDuplicateMoveRequest(tx, { unit: body.unit, moveDate: body.moveDate, moveType: body.moveType, staff: true });
       await assertNoConflict(
         tx,
         { startDatetime: body.startDatetime, endDatetime: body.endDatetime, elevatorRequired: body.elevatorRequired, moveType: body.moveType },
@@ -360,6 +361,16 @@ export async function bookingRoutes(app: FastifyInstance) {
     }
 
     const updated = await prisma.$transaction(async (tx) => {
+      const newStatus = body.status ?? existing.status;
+      if (['SUBMITTED', 'PENDING', 'APPROVED'].includes(newStatus)) {
+        await assertNoDuplicateMoveRequest(tx, {
+          unit: body.unit ?? existing.unit,
+          moveDate: body.startDatetime ?? existing.moveDate,
+          moveType: body.moveType ?? existing.moveType,
+          excludeId: existing.id,
+          staff: true,
+        });
+      }
       await assertNoConflict(
         tx,
         {

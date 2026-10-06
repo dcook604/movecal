@@ -7,7 +7,7 @@ import { stringify } from 'csv-stringify/sync';
 import { prisma } from '../prisma.js';
 import { identityFields } from '../utils/identity.js';
 import { config } from '../config.js';
-import { assertNoConflict } from '../services/conflictService.js';
+import { assertNoConflict, assertNoDuplicateMoveRequest } from '../services/conflictService.js';
 import { requireAuth, requireRole } from '../middleware/auth.js';
 import { validateMoveTime } from '../utils/moveTimeValidator.js';
 import { sendEmail, emailWrapper } from '../services/emailService.js';
@@ -217,6 +217,7 @@ export async function systemRoutes(app: FastifyInstance) {
 
     const concierge = await prisma.user.findFirstOrThrow({ where: { role: UserRole.CONCIERGE } });
     const booking = await prisma.$transaction(async (tx) => {
+      await assertNoDuplicateMoveRequest(tx, { unit: body.unit, moveDate: body.moveDate, moveType: body.moveType, staff: true });
       await assertNoConflict(
         tx,
         { startDatetime: body.startDatetime, endDatetime: body.endDatetime, elevatorRequired: body.elevatorRequired },

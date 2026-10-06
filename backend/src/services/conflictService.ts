@@ -19,29 +19,49 @@ export class DuplicateMoveRequestError extends Error {
   statusCode = 409;
 }
 
-const DUPLICATE_CHECK_MOVE_TYPES = [BookingStatus.SUBMITTED, BookingStatus.PENDING, BookingStatus.APPROVED];
+const ACTIVE_STATUSES = [BookingStatus.SUBMITTED, BookingStatus.PENDING, BookingStatus.APPROVED];
 
-// A unit can only have one active Move In / Move Out request per day — residents must amend
-// their existing reservation (via the emailed edit link) instead of submitting a new one.
+// Move In / Move Out style bookings are mutually exclusive for a unit on a given day.
+const MOVE_FAMILY = ['MOVE_IN', 'MOVE_OUT', 'FURNISHED_MOVE', 'SUITCASE_MOVE'];
+
+// "5-03", " 503 " and "503" are the same unit
+function normalizeUnitKey(unit: string) {
+  return unit.toUpperCase().replace(/[^A-Z0-9]/g, '');
+}
+
+// A unit can only have one active move per day (Move In / Move Out / Furnished / Suitcase), and no
+// other booking type may be duplicated for the same unit, day and type. Residents must amend their
+// existing reservation instead of submitting a new one.
+//
+// Must run inside the same transaction as the write: it takes a per-unit/day advisory lock so two
+// simultaneous submissions can't both pass the check.
 export async function assertNoDuplicateMoveRequest(
   prismaTx: Prisma.TransactionClient,
-  params: { unit: string; moveDate: Date; moveType: string }
+  params: { unit: string; moveDate: Date; moveType: string; excludeId?: string; staff?: boolean }
 ) {
-  if (params.moveType !== 'MOVE_IN' && params.moveType !== 'MOVE_OUT') return;
+  const unitKey = normalizeUnitKey(params.unit);
+  if (!unitKey) return;
+  const dayKey = dayjs(params.moveDate).format('YYYY-MM-DD');
 
+  await prismaTx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`move:${unitKey}:${dayKey}`}))`;
+
+  const types = MOVE_FAMILY.includes(params.moveType) ? MOVE_FAMILY : [params.moveType];
   const existing = await prismaTx.booking.findFirst({
     where: {
-      unit: { equals: params.unit.trim(), mode: 'insensitive' },
-      moveType: { in: ['MOVE_IN', 'MOVE_OUT'] },
+      ...(params.excludeId ? { id: { not: params.excludeId } } : {}),
+      unitNorm: unitKey,
+      moveType: { in: types as any },
       moveDate: params.moveDate,
-      status: { in: DUPLICATE_CHECK_MOVE_TYPES },
+      status: { in: ACTIVE_STATUSES },
     },
   });
 
   if (existing) {
     throw new DuplicateMoveRequestError(
-      `Unit ${params.unit} already has an active Move In/Move Out request for this date. ` +
-      `To change it, use the manage-booking link from your confirmation email. If you can't find it:`
+      params.staff
+        ? `Unit ${params.unit} already has an active ${existing.moveType.replace(/_/g, ' ').toLowerCase()} booking on ${dayKey}. Edit or cancel that booking instead.`
+        : `Unit ${params.unit} already has an active move request for this date. ` +
+          `To change it, use the manage-booking link from your confirmation email. If you can't find it:`
     );
   }
 }
