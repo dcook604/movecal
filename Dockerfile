@@ -5,13 +5,13 @@ WORKDIR /app
 ARG VITE_API_URL
 ENV VITE_API_URL=$VITE_API_URL
 
-COPY package.json package.json
+COPY package.json package-lock.json ./
 COPY backend/package.json backend/package.json
 COPY frontend/package.json frontend/package.json
 
 RUN apk add --no-cache openssl
 # Ensure dev deps are installed for build tools like tsc even if NODE_ENV is set in the build environment.
-RUN npm install --include=dev
+RUN npm ci --include=dev
 
 COPY backend backend
 COPY frontend frontend
