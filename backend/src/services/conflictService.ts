@@ -70,7 +70,7 @@ export function validateMoveHours(startDatetime: Date, endDatetime: Date) {
   const start = dayjs(startDatetime);
   const end = dayjs(endDatetime);
   if (!end.isAfter(start)) throw new Error('End time must be after start time');
-  // Sanity-check against absolute outer bounds (8am–5pm).
+  // Sanity-check against absolute outer bounds (8am–7pm).
   // Detailed slot validation is handled by validateMoveTime in moveTimeValidator.ts.
   if (start.hour() < MOVE_START_HOUR || end.hour() > MOVE_END_HOUR || (end.hour() === MOVE_END_HOUR && end.minute() > 0)) {
     throw new Error('Booking must be within permitted move hours (8:00 AM – 7:00 PM)');
