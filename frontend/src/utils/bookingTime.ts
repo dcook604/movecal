@@ -8,3 +8,17 @@ import dayjs, { Dayjs } from 'dayjs';
 export function parseBookingTime(iso: string): Dayjs {
   return dayjs(iso.replace('Z', ''));
 }
+
+// Multi-slot bookings (renovations) submit a single range that runs from the earliest
+// selected slot's start to the latest selected slot's end.
+export function selectedSlotRange<T extends { start: string; end: string }>(
+  slots: T[],
+  selectedStarts: string[]
+): { start: string; end: string } | null {
+  const chosen = slots
+    .filter((s) => selectedStarts.includes(s.start))
+    .sort((a, b) => a.start.localeCompare(b.start));
+  if (chosen.length === 0) return null;
+  return { start: chosen[0].start, end: chosen[chosen.length - 1].end };
+}
+

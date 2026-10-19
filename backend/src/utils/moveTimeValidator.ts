@@ -149,7 +149,7 @@ function fitsInSlot(startMins: number, endMins: number, slots: [number, number][
  *   Monday–Friday: 10:00 AM – 4:00 PM
  *   Saturday–Sunday: 8:00 AM – 5:00 PM
  *
- * RENO (1-hour slots):
+ * RENO (one or more consecutive 1-hour blocks):
  *   Monday–Friday: 10:00 AM – 4:00 PM
  *   Saturday–Sunday: 8:00 AM – 5:00 PM
  *
@@ -221,11 +221,11 @@ export function validateMoveTime(startDatetime: Date, endDatetime: Date, moveTyp
     return { valid: true };
   }
 
-  // RENO: 1-hour slots within allowed range
+  // RENO: one or more consecutive 1-hour blocks within allowed range
   if (moveType === 'RENO') {
     const durationMins = end.diff(start, 'minute');
-    if (durationMins !== 60) {
-      return { valid: false, error: 'Renovation bookings must be exactly 1 hour' };
+    if (durationMins < 60 || durationMins % 60 !== 0 || startMins % 60 !== 0) {
+      return { valid: false, error: 'Renovation bookings must be in whole-hour blocks (minimum 1 hour)' };
     }
     const [rangeStart, rangeEnd] = isWeekend ? DELIVERY_RENO_WEEKEND : DELIVERY_RENO_WEEKDAY;
     const rangeLabel = isWeekend ? '8:00 AM – 5:00 PM' : '10:00 AM – 4:00 PM';
@@ -320,7 +320,7 @@ export function getPermittedMoveTimes(): string {
 • Move In / Move Out — Monday–Friday: 10:00 AM–1:00 PM or 1:00 PM–4:00 PM; Saturday–Sunday: 10:00 AM–1:00 PM or 1:00 PM–4:00 PM
 • Furnished Move — Monday–Friday: 10:00 AM–12:00 PM, 12:00 PM–2:00 PM, or 2:00 PM–4:00 PM; Saturday–Sunday: 12:00 PM–2:00 PM or 2:00 PM–4:00 PM
 • Delivery: Monday–Friday 10:00 AM–4:00 PM; Saturday–Sunday 8:00 AM–5:00 PM (30-min blocks)
-• Renovation: Monday–Friday 10:00 AM–4:00 PM; Saturday–Sunday 8:00 AM–5:00 PM (1-hour slots)
+• Renovation: Monday–Friday 10:00 AM–4:00 PM; Saturday–Sunday 8:00 AM–5:00 PM (1-hour blocks; select one or more)
 • Open House: Saturday or Sunday only, 2:00 PM–5:00 PM
 • Suitcase Move: 1-hour slots within move windows (Mon–Fri same as Move In/Out; Sat–Sun 11am–2pm or 2pm–5pm)
 • NO BOOKINGS PERMITTED ON STATUTORY HOLIDAYS`;

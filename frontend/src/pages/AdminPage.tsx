@@ -2,7 +2,7 @@ import { FormEvent, useEffect, useState } from 'react';
 import axios from 'axios';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { api, setToken } from '../api';
-import { parseBookingTime } from '../utils/bookingTime';
+import { parseBookingTime, selectedSlotRange } from '../utils/bookingTime';
 import '../styles/admin.css';
 import dayjs from 'dayjs';
 
@@ -183,7 +183,7 @@ export function AdminPage() {
   };
   const [showQuickEntry, setShowQuickEntry] = useState(false);
   const [quickForm, setQuickForm] = useState<any>(emptyQuickEntry);
-  const [quickSlot, setQuickSlot] = useState('');
+  const [quickSlots, setQuickSlots] = useState<string[]>([]);
   const [quickError, setQuickError] = useState('');
   const [isQuickSubmitting, setIsQuickSubmitting] = useState(false);
   const [quickTakenRanges, setQuickTakenRanges] = useState<{ start: string; end: string }[]>([]);
@@ -191,8 +191,7 @@ export function AdminPage() {
   // ── Edit booking modal ────────────────────────────────────────
   const [editingBookingId, setEditingBookingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<any>({});
-  const [editSlot, setEditSlot] = useState('');
-  const [editOriginalSlot, setEditOriginalSlot] = useState('');
+  const [editSlots, setEditSlots] = useState<string[]>([]);
   const [editOriginalStartDatetime, setEditOriginalStartDatetime] = useState('');
   const [editOriginalEndDatetime, setEditOriginalEndDatetime] = useState('');
   const [editError, setEditError] = useState('');
@@ -553,15 +552,15 @@ export function AdminPage() {
     e.preventDefault();
     setQuickError('');
     const slots = getSlotsForDateAndType(quickForm.moveDate, quickForm.moveType);
-    const selected = slots?.find((s) => s.start === quickSlot);
-    if (!selected) { setQuickError('Please select a valid time slot.'); return; }
-    const startDatetime = `${quickForm.moveDate}T${selected.start}:00`;
-    const endDatetime   = `${quickForm.moveDate}T${selected.end}:00`;
+    const range = slots ? selectedSlotRange(slots, quickSlots) : null;
+    if (!range) { setQuickError('Please select a valid time slot.'); return; }
+    const startDatetime = `${quickForm.moveDate}T${range.start}:00`;
+    const endDatetime   = `${quickForm.moveDate}T${range.end}:00`;
     setIsQuickSubmitting(true);
     try {
       await api.post('/api/admin/quick-entry/approve', { ...quickForm, startDatetime, endDatetime });
       setQuickForm(emptyQuickEntry);
-      setQuickSlot('');
+      setQuickSlots([]);
       setShowQuickEntry(false);
       await refresh();
       setActionMessage('Booking created and approved successfully');
@@ -633,8 +632,18 @@ export function AdminPage() {
       loadingBayRequired: !!b.loadingBayRequired,
       notes: b.notes ?? '',
     });
-    setEditSlot(`${hh}:${mm}`);
-    setEditOriginalSlot(`${hh}:${mm}`);
+    const startHHmm = `${hh}:${mm}`;
+    const endHHmm = parseBookingTime(b.endDatetime).format('HH:mm');
+    if (b.moveType === 'RENO') {
+      // Preselect every 1-hour slot covered by the existing renovation booking.
+      const rawSlots = getSlotsForDateAndType(moveDate, b.moveType);
+      const covered = (rawSlots ?? [])
+        .filter((s) => s.start >= startHHmm && s.end <= endHHmm)
+        .map((s) => s.start);
+      setEditSlots(covered.length ? covered : [startHHmm]);
+    } else {
+      setEditSlots([startHHmm]);
+    }
     setEditOriginalStartDatetime(b.startDatetime);
     setEditOriginalEndDatetime(b.endDatetime);
     setEditError('');
@@ -644,8 +653,7 @@ export function AdminPage() {
   const closeEditBooking = () => {
     setEditingBookingId(null);
     setEditForm({});
-    setEditSlot('');
-    setEditOriginalSlot('');
+    setEditSlots([]);
     setEditOriginalStartDatetime('');
     setEditOriginalEndDatetime('');
     setEditError('');
@@ -658,11 +666,16 @@ export function AdminPage() {
     if (phoneErr) { setEditError(phoneErr); return; }
 
     const slots = getSlotsForDateAndType(editForm.moveDate, editForm.moveType);
-    const selected = slots?.find((s) => s.start === editSlot);
-    const isKeepingOriginalSlot = editSlot === editOriginalSlot && !!editOriginalStartDatetime;
-    if (!selected && !isKeepingOriginalSlot) { setEditError('Please select a valid time slot.'); return; }
-    const startDatetime = selected ? `${editForm.moveDate}T${selected.start}:00` : editOriginalStartDatetime;
-    const endDatetime   = selected ? `${editForm.moveDate}T${selected.end}:00`   : editOriginalEndDatetime;
+    const range = slots ? selectedSlotRange(slots, editSlots) : null;
+    // Keep the original times when the existing booking's range doesn't line up with
+    // standard slots (e.g. an admin override) and the date wasn't changed.
+    const originalDate = editOriginalStartDatetime
+      ? parseBookingTime(editOriginalStartDatetime).format('YYYY-MM-DD')
+      : '';
+    const isKeepingOriginalSlot = !range && !!editOriginalStartDatetime && editForm.moveDate === originalDate;
+    if (!range && !isKeepingOriginalSlot) { setEditError('Please select a valid time slot.'); return; }
+    const startDatetime = range ? `${editForm.moveDate}T${range.start}:00` : editOriginalStartDatetime;
+    const endDatetime   = range ? `${editForm.moveDate}T${range.end}:00`   : editOriginalEndDatetime;
 
     setIsSavingEdit(true);
     setEditError('');
@@ -804,11 +817,21 @@ export function AdminPage() {
         const eRawSlots = getSlotsForDateAndType(editForm.moveDate, editForm.moveType);
         const eIsHoliday = editForm.moveDate && eRawSlots !== null && eRawSlots.length === 0;
         const eSlots = eRawSlots ? filterAvailableSlots(eRawSlots, editTakenRanges) : eRawSlots;
-        // Ensure the current slot is always in the list (it may have been excluded when date didn't change)
-        const currentSlotInList = eSlots?.some((s) => s.start === editSlot);
-        const allESlots = eSlots && !currentSlotInList && editSlot
-          ? [...(eSlots ?? []), { label: `${editSlot} (current)`, start: editSlot, end: '' }].sort((a, b) => a.start.localeCompare(b.start))
-          : eSlots;
+        const eIsReno = editForm.moveType === 'RENO';
+        const eRange = eRawSlots ? selectedSlotRange(eRawSlots, editSlots) : null;
+        // Ensure currently selected slots are always shown, even if they were filtered out
+        // because they overlap another booking (e.g. date unchanged, or an override).
+        const eSelectedToShow = eIsReno ? editSlots : editSlots.slice(0, 1);
+        const allESlots = (() => {
+          const options = [...(eSlots ?? [])];
+          for (const start of eSelectedToShow) {
+            if (!options.some((s) => s.start === start)) {
+              const raw = eRawSlots?.find((s) => s.start === start);
+              options.push(raw ?? { label: `${start} (current)`, start, end: '' });
+            }
+          }
+          return options.sort((a, b) => a.start.localeCompare(b.start));
+        })();
         return (
           <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 1000, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '24px 16px', overflowY: 'auto' }}>
             <div style={{ background: '#fff', borderRadius: '12px', padding: '28px 24px', width: '100%', maxWidth: '560px', boxShadow: '0 20px 40px rgba(0,0,0,0.3)', marginTop: '16px' }}>
@@ -832,7 +855,7 @@ export function AdminPage() {
                 </div>
                 <div className="form-field">
                   <label>Booking Type</label>
-                  <select value={editForm.moveType} onChange={(e) => { setEditForm({ ...editForm, moveType: e.target.value }); setEditSlot(''); }}>
+                  <select value={editForm.moveType} onChange={(e) => { setEditForm({ ...editForm, moveType: e.target.value }); setEditSlots([]); }}>
                     <option value="MOVE_IN">Move In</option>
                     <option value="MOVE_OUT">Move Out</option>
                     <option value="FURNISHED_MOVE">Furnished Move</option>
@@ -843,18 +866,54 @@ export function AdminPage() {
                 </div>
                 <div className="form-field">
                   <label>Date</label>
-                  <input type="date" value={editForm.moveDate} onChange={(e) => { setEditForm({ ...editForm, moveDate: e.target.value }); setEditSlot(''); }} />
+                  <input type="date" value={editForm.moveDate} onChange={(e) => { setEditForm({ ...editForm, moveDate: e.target.value }); setEditSlots([]); }} />
                 </div>
                 <div className="form-field">
-                  <label>Time Slot</label>
-                  <select value={editSlot} onChange={(e) => setEditSlot(e.target.value)} disabled={!editForm.moveDate || !!eIsHoliday || allESlots?.length === 0}>
-                    <option value="">
-                      {!editForm.moveDate ? 'Select a date first' : eIsHoliday ? 'No slots on holidays' : allESlots?.length === 0 ? 'No slots available' : 'Select a time slot'}
-                    </option>
-                    {(allESlots ?? []).map((s) => (
-                      <option key={s.start} value={s.start}>{s.label}</option>
-                    ))}
-                  </select>
+                  {eIsReno ? (
+                    <>
+                      <label className="required">Time Slots</label>
+                      <div className="slot-checkbox-grid">
+                        {allESlots.map((s) => (
+                          <label
+                            key={s.start}
+                            className={`slot-checkbox${editSlots.includes(s.start) ? ' slot-checkbox--selected' : ''}`}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={editSlots.includes(s.start)}
+                              onChange={() => setEditSlots((prev) =>
+                                prev.includes(s.start) ? prev.filter((x) => x !== s.start) : [...prev, s.start]
+                              )}
+                            />
+                            <span>{s.label}</span>
+                          </label>
+                        ))}
+                      </div>
+                      {(!editForm.moveDate || eIsHoliday || allESlots.length === 0) && (
+                        <small>
+                          {!editForm.moveDate ? 'Select a date first' : eIsHoliday ? 'No slots on holidays' : 'No slots available'}
+                        </small>
+                      )}
+                      {eRange && (
+                        <small className="slot-selection-summary">
+                          Booked time: {minsToLabel(timeToMins(eRange.start))} – {minsToLabel(timeToMins(eRange.end))}
+                          {' '}({(timeToMins(eRange.end) - timeToMins(eRange.start)) / 60} hours)
+                        </small>
+                      )}
+                    </>
+                  ) : (
+                    <>
+                      <label>Time Slot</label>
+                      <select value={editSlots[0] ?? ''} onChange={(e) => setEditSlots(e.target.value ? [e.target.value] : [])} disabled={!editForm.moveDate || !!eIsHoliday || allESlots?.length === 0}>
+                        <option value="">
+                          {!editForm.moveDate ? 'Select a date first' : eIsHoliday ? 'No slots on holidays' : allESlots?.length === 0 ? 'No slots available' : 'Select a time slot'}
+                        </option>
+                        {(allESlots ?? []).map((s) => (
+                          <option key={s.start} value={s.start}>{s.label}</option>
+                        ))}
+                      </select>
+                    </>
+                  )}
                 </div>
                 <div className="form-field">
                   <label>Company Name</label>
@@ -981,6 +1040,8 @@ export function AdminPage() {
         const qRawSlots = getSlotsForDateAndType(quickForm.moveDate, quickForm.moveType);
         const qIsHoliday = quickForm.moveDate && qRawSlots !== null && qRawSlots.length === 0;
         const qSlots = qRawSlots ? filterAvailableSlots(qRawSlots, quickTakenRanges) : qRawSlots;
+        const qIsReno = quickForm.moveType === 'RENO';
+        const qRange = qRawSlots ? selectedSlotRange(qRawSlots, quickSlots) : null;
 
         const moveTypeLabel = (t: string) => ({ MOVE_IN: 'Move In', MOVE_OUT: 'Move Out', DELIVERY: 'Delivery', RENO: 'Renovation', FURNISHED_MOVE: 'Furnished Move', SUITCASE_MOVE: 'Suitcase Move' }[t] ?? t);
         const fmtDate = (iso: string) => new Date(iso).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
@@ -1082,7 +1143,7 @@ export function AdminPage() {
                     <div className="form-field">
                       <label htmlFor="qe-type" className="required">Booking Type</label>
                       <select id="qe-type" value={quickForm.moveType}
-                        onChange={(e) => { setQuickForm({ ...quickForm, moveType: e.target.value }); setQuickSlot(''); }}>
+                        onChange={(e) => { setQuickForm({ ...quickForm, moveType: e.target.value }); setQuickSlots([]); }}>
                         <option value="MOVE_IN">Move In</option>
                         <option value="MOVE_OUT">Move Out</option>
                         <option value="FURNISHED_MOVE">Furnished Move</option>
@@ -1094,22 +1155,58 @@ export function AdminPage() {
                     <div className="form-field">
                       <label htmlFor="qe-date" className="required">Date</label>
                       <input id="qe-date" type="date" value={quickForm.moveDate}
-                        onChange={(e) => { setQuickForm({ ...quickForm, moveDate: e.target.value }); setQuickSlot(''); }}
+                        onChange={(e) => { setQuickForm({ ...quickForm, moveDate: e.target.value }); setQuickSlots([]); }}
                         required />
                     </div>
                     <div className="form-field">
-                      <label htmlFor="qe-slot" className="required">Time Slot</label>
-                      <select id="qe-slot" value={quickSlot}
-                        onChange={(e) => setQuickSlot(e.target.value)}
-                        disabled={!quickForm.moveDate || !!qIsHoliday || qSlots?.length === 0}
-                        required>
-                        <option value="">
-                          {!quickForm.moveDate ? 'Select a date first' : qIsHoliday ? 'No slots on holidays' : qSlots?.length === 0 ? 'No slots available' : 'Select a time slot'}
-                        </option>
-                        {(qSlots ?? []).map((s) => (
-                          <option key={s.start} value={s.start}>{s.label}</option>
-                        ))}
-                      </select>
+                      {qIsReno ? (
+                        <>
+                          <label className="required">Time Slots</label>
+                          <div className="slot-checkbox-grid">
+                            {(qSlots ?? []).map((s) => (
+                              <label
+                                key={s.start}
+                                className={`slot-checkbox${quickSlots.includes(s.start) ? ' slot-checkbox--selected' : ''}`}
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={quickSlots.includes(s.start)}
+                                  onChange={() => setQuickSlots((prev) =>
+                                    prev.includes(s.start) ? prev.filter((x) => x !== s.start) : [...prev, s.start]
+                                  )}
+                                />
+                                <span>{s.label}</span>
+                              </label>
+                            ))}
+                          </div>
+                          {(!quickForm.moveDate || qIsHoliday || qSlots?.length === 0) && (
+                            <small>
+                              {!quickForm.moveDate ? 'Select a date first' : qIsHoliday ? 'No slots on holidays' : 'No slots available'}
+                            </small>
+                          )}
+                          {qRange && (
+                            <small className="slot-selection-summary">
+                              Booked time: {minsToLabel(timeToMins(qRange.start))} – {minsToLabel(timeToMins(qRange.end))}
+                              {' '}({(timeToMins(qRange.end) - timeToMins(qRange.start)) / 60} hours)
+                            </small>
+                          )}
+                        </>
+                      ) : (
+                        <>
+                          <label htmlFor="qe-slot" className="required">Time Slot</label>
+                          <select id="qe-slot" value={quickSlots[0] ?? ''}
+                            onChange={(e) => setQuickSlots(e.target.value ? [e.target.value] : [])}
+                            disabled={!quickForm.moveDate || !!qIsHoliday || qSlots?.length === 0}
+                            required>
+                            <option value="">
+                              {!quickForm.moveDate ? 'Select a date first' : qIsHoliday ? 'No slots on holidays' : qSlots?.length === 0 ? 'No slots available' : 'Select a time slot'}
+                            </option>
+                            {(qSlots ?? []).map((s) => (
+                              <option key={s.start} value={s.start}>{s.label}</option>
+                            ))}
+                          </select>
+                        </>
+                      )}
                     </div>
                     <div className="form-field">
                       <label htmlFor="qe-company">Company Name</label>

@@ -2,6 +2,7 @@ import { FormEvent, useEffect, useState } from 'react';
 import dayjs from 'dayjs';
 import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../api';
+import { selectedSlotRange } from '../utils/bookingTime';
 import '../styles/resident.css';
 
 // ── Time slot definitions ─────────────────────────────────────
@@ -206,7 +207,7 @@ type FieldErrors = Partial<Record<'residentName' | 'residentEmail' | 'residentPh
 export function ResidentSubmissionPage() {
   const navigate = useNavigate();
   const [form, setForm] = useState<any>({ moveType: 'MOVE_IN', elevatorRequired: true, loadingBayRequired: false });
-  const [slot, setSlot] = useState('');
+  const [selectedSlots, setSelectedSlots] = useState<string[]>([]);
   const [accepted, setAccepted] = useState(false);
   const [acceptedFees, setAcceptedFees] = useState(false);
   const [message, setMessage] = useState('');
@@ -252,14 +253,26 @@ export function ResidentSubmissionPage() {
   const rawSlots = getSlotsForDateAndType(form.moveDate ?? '', form.moveType ?? 'MOVE_IN');
   const availableSlots = rawSlots ? filterAvailableSlots(rawSlots, takenRanges) : rawSlots;
 
-  const handleDateChange = (dateStr: string) => {
-    setSlot('');
+  const handleDateChange = (_dateStr: string) => {
+    setSelectedSlots([]);
     // form state is set by handleFieldChange
   };
 
   const handleMoveTypeChange = (moveType: string) => {
     setForm({ ...form, moveType });
-    setSlot('');
+    setSelectedSlots([]);
+  };
+
+  const isReno = form.moveType === 'RENO';
+  const selectedRange = availableSlots ? selectedSlotRange(availableSlots, selectedSlots) : null;
+  const selectedHours = selectedRange
+    ? (timeToMins(selectedRange.end) - timeToMins(selectedRange.start)) / 60
+    : 0;
+
+  const toggleSlot = (start: string) => {
+    setSelectedSlots((prev) =>
+      prev.includes(start) ? prev.filter((s) => s !== start) : [...prev, start]
+    );
   };
 
   const submit = async (e: FormEvent) => {
@@ -294,8 +307,8 @@ export function ResidentSubmissionPage() {
       setMessage('');
       return;
     }
-    if (!slot) {
-      setError('Please select a time slot');
+    if (!selectedRange) {
+      setError(isReno ? 'Please select at least one time slot' : 'Please select a time slot');
       setMessage('');
       return;
     }
@@ -310,14 +323,9 @@ export function ResidentSubmissionPage() {
       return;
     }
 
-    // Build startDatetime / endDatetime from date + slot
-    const selected = availableSlots?.find((s) => s.start === slot);
-    if (!selected) {
-      setError('Invalid time slot selected');
-      return;
-    }
-    const startDatetime = `${form.moveDate}T${selected.start}:00`;
-    const endDatetime   = `${form.moveDate}T${selected.end}:00`;
+    // Build startDatetime / endDatetime from date + selected slot(s)
+    const startDatetime = `${form.moveDate}T${selectedRange.start}:00`;
+    const endDatetime   = `${form.moveDate}T${selectedRange.end}:00`;
 
     setIsSubmitting(true);
     setError('');
@@ -339,7 +347,11 @@ export function ResidentSubmissionPage() {
   const isOpenHouseType = form.moveType === 'OPEN_HOUSE';
   const isSuitcaseMove = form.moveType === 'SUITCASE_MOVE';
   const isFurnishedMove = form.moveType === 'FURNISHED_MOVE';
-  const blockLabel = form.moveType === 'DELIVERY' ? '30-minute blocks' : '1-hour slots';
+  const blockLabel = form.moveType === 'DELIVERY'
+    ? '30-minute blocks'
+    : isReno
+      ? '1-hour blocks — select one or more for a full-day renovation'
+      : '1-hour slots';
 
   return (
     <div className="page-container">
@@ -514,20 +526,58 @@ export function ResidentSubmissionPage() {
             )}
 
             <div className="form-field">
-              <label htmlFor="time-slot" className="required">Time Slot</label>
-              <select
-                id="time-slot"
-                value={slot}
-                onChange={(e) => setSlot(e.target.value)}
-                disabled={!form.moveDate || isHoliday || isOpenHouseWeekday || availableSlots?.length === 0}
-              >
-                <option value="">
-                  {!form.moveDate ? 'Select a date first' : availableSlots?.length === 0 ? 'No slots available' : 'Select a time slot'}
-                </option>
-                {(availableSlots ?? []).map((s) => (
-                  <option key={s.start} value={s.start}>{s.label}</option>
-                ))}
-              </select>
+              {isReno ? (
+                <>
+                  <label className="required">Time Slots</label>
+                  <div className="slot-checkbox-grid">
+                    {(availableSlots ?? []).map((s) => (
+                      <label
+                        key={s.start}
+                        className={`slot-checkbox${selectedSlots.includes(s.start) ? ' slot-checkbox--selected' : ''}`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selectedSlots.includes(s.start)}
+                          onChange={() => toggleSlot(s.start)}
+                        />
+                        <span>{s.label}</span>
+                      </label>
+                    ))}
+                  </div>
+                  {(!form.moveDate || isHoliday || isOpenHouseWeekday || availableSlots?.length === 0) && (
+                    <small>
+                      {!form.moveDate
+                        ? 'Select a date first'
+                        : isHoliday
+                          ? 'No bookings on statutory holidays'
+                          : 'No slots available'}
+                    </small>
+                  )}
+                  {selectedRange && (
+                    <small className="slot-selection-summary">
+                      Booked time: {minsToLabel(timeToMins(selectedRange.start))} – {minsToLabel(timeToMins(selectedRange.end))}
+                      {' '}({selectedHours} {selectedHours === 1 ? 'hour' : 'hours'})
+                    </small>
+                  )}
+                </>
+              ) : (
+                <>
+                  <label htmlFor="time-slot" className="required">Time Slot</label>
+                  <select
+                    id="time-slot"
+                    value={selectedSlots[0] ?? ''}
+                    onChange={(e) => setSelectedSlots(e.target.value ? [e.target.value] : [])}
+                    disabled={!form.moveDate || isHoliday || isOpenHouseWeekday || availableSlots?.length === 0}
+                  >
+                    <option value="">
+                      {!form.moveDate ? 'Select a date first' : availableSlots?.length === 0 ? 'No slots available' : 'Select a time slot'}
+                    </option>
+                    {(availableSlots ?? []).map((s) => (
+                      <option key={s.start} value={s.start}>{s.label}</option>
+                    ))}
+                  </select>
+                </>
+              )}
             </div>
 
             <div className="form-field">

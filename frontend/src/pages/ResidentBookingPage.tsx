@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import dayjs from 'dayjs';
 import { api } from '../api';
-import { parseBookingTime } from '../utils/bookingTime';
+import { parseBookingTime, selectedSlotRange } from '../utils/bookingTime';
 import '../styles/resident.css';
 
 // ── Time slot definitions (mirrors backend rules) ─────────────
@@ -177,7 +177,7 @@ export function ResidentBookingPage() {
 
   // Date/time change state
   const [editDate, setEditDate] = useState('');
-  const [editSlot, setEditSlot] = useState('');
+  const [editSlots, setEditSlots] = useState<string[]>([]);
   const [takenRanges, setTakenRanges] = useState<{ start: string; end: string }[]>([]);
   const [changingTime, setChangingTime] = useState(false);
 
@@ -199,13 +199,23 @@ export function ResidentBookingPage() {
       setEditNotes(b.notes ?? '');
       setEditElevator(b.elevatorRequired);
       setEditLoadingBay(b.loadingBayRequired);
-      setEditDate(parseBookingTime(b.startDatetime).format('YYYY-MM-DD'));
-      const existing = getSlotsForDateAndType(parseBookingTime(b.startDatetime).format('YYYY-MM-DD'), b.moveType);
-      const match = existing?.find(s =>
-        s.start === parseBookingTime(b.startDatetime).format('HH:mm') &&
-        s.end === parseBookingTime(b.endDatetime).format('HH:mm')
-      );
-      setEditSlot(match?.start ?? '');
+      const start = parseBookingTime(b.startDatetime);
+      const end = parseBookingTime(b.endDatetime);
+      setEditDate(start.format('YYYY-MM-DD'));
+      const existing = getSlotsForDateAndType(start.format('YYYY-MM-DD'), b.moveType);
+      if (b.moveType === 'RENO') {
+        // A renovation may span multiple 1-hour slots; preselect every slot in the booking.
+        const startTime = start.format('HH:mm');
+        const endTime = end.format('HH:mm');
+        setEditSlots(
+          (existing ?? [])
+            .filter((s) => s.start >= startTime && s.end <= endTime)
+            .map((s) => s.start)
+        );
+      } else {
+        const match = existing?.find(s => s.start === start.format('HH:mm') && s.end === end.format('HH:mm'));
+        setEditSlots(match ? [match.start] : []);
+      }
     } catch (err: any) {
       if (err.response?.status === 404) {
         setError('Booking not found.');
@@ -239,7 +249,13 @@ export function ResidentBookingPage() {
 
   const handleDateChange = (dateStr: string) => {
     setEditDate(dateStr);
-    setEditSlot('');
+    setEditSlots([]);
+  };
+
+  const toggleEditSlot = (start: string) => {
+    setEditSlots((prev) =>
+      prev.includes(start) ? prev.filter((s) => s !== start) : [...prev, start]
+    );
   };
 
   const handleSave = async () => {
@@ -259,20 +275,15 @@ export function ResidentBookingPage() {
         setSaving(false);
         return;
       }
-      if (!editSlot) {
+      const selectedRange = rawSlots ? selectedSlotRange(rawSlots, editSlots) : null;
+      if (!selectedRange) {
         setSaveMessage('Please select a time slot');
         setSaving(false);
         return;
       }
-      const selected = availableSlots?.find(s => s.start === editSlot);
-      if (!selected) {
-        setSaveMessage('Invalid time slot selected');
-        setSaving(false);
-        return;
-      }
       payload.moveDate = editDate;
-      payload.startDatetime = `${editDate}T${selected.start}:00`;
-      payload.endDatetime = `${editDate}T${selected.end}:00`;
+      payload.startDatetime = `${editDate}T${selectedRange.start}:00`;
+      payload.endDatetime = `${editDate}T${selectedRange.end}:00`;
     }
 
     try {
@@ -308,9 +319,11 @@ export function ResidentBookingPage() {
       editElevator !== booking.elevatorRequired ||
       editLoadingBay !== booking.loadingBayRequired);
 
-  const hasTimeChange = changingTime && editSlot && booking &&
+  const editRange = rawSlots ? selectedSlotRange(rawSlots, editSlots) : null;
+  const hasTimeChange = changingTime && !!editRange && booking &&
     (editDate !== parseBookingTime(booking.startDatetime).format('YYYY-MM-DD') ||
-     editSlot !== parseBookingTime(booking.startDatetime).format('HH:mm'));
+     editRange.start !== parseBookingTime(booking.startDatetime).format('HH:mm') ||
+     editRange.end !== parseBookingTime(booking.endDatetime).format('HH:mm'));
 
   const canSave = booking && (hasEdits || hasTimeChange);
 
@@ -454,7 +467,7 @@ export function ResidentBookingPage() {
                 <div className="form-field" style={{ marginTop: 16 }}>
                   <label className="checkbox-label" style={{ fontWeight: 600 }}>
                     <input type="checkbox" checked={changingTime}
-                      onChange={(e) => { setChangingTime(e.target.checked); if (!e.target.checked) setEditSlot(''); }} />
+                      onChange={(e) => { setChangingTime(e.target.checked); if (!e.target.checked) setEditSlots([]); }} />
                     Change date or time slot
                   </label>
                 </div>
@@ -477,18 +490,52 @@ export function ResidentBookingPage() {
                   )}
 
                   <div className="form-field">
-                    <label htmlFor="edit-time-slot" className="required">New Time Slot</label>
-                    <select id="edit-time-slot"
-                      value={editSlot}
-                      onChange={(e) => setEditSlot(e.target.value)}
-                      disabled={!editDate || isHoliday || availableSlots?.length === 0}>
-                      <option value="">
-                        {!editDate ? 'Select a date first' : availableSlots?.length === 0 ? 'No slots available' : 'Select a time slot'}
-                      </option>
-                      {(availableSlots ?? []).map((s) => (
-                        <option key={s.start} value={s.start}>{s.label}</option>
-                      ))}
-                    </select>
+                    {booking.moveType === 'RENO' ? (
+                      <>
+                        <label className="required">New Time Slots</label>
+                        <div className="slot-checkbox-grid">
+                          {(availableSlots ?? []).map((s) => (
+                            <label
+                              key={s.start}
+                              className={`slot-checkbox${editSlots.includes(s.start) ? ' slot-checkbox--selected' : ''}`}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={editSlots.includes(s.start)}
+                                onChange={() => toggleEditSlot(s.start)}
+                              />
+                              <span>{s.label}</span>
+                            </label>
+                          ))}
+                        </div>
+                        {(!editDate || isHoliday || availableSlots?.length === 0) && (
+                          <small>
+                            {!editDate ? 'Select a date first' : isHoliday ? 'No bookings on statutory holidays' : 'No slots available'}
+                          </small>
+                        )}
+                        {editRange && (
+                          <small className="slot-selection-summary">
+                            Booked time: {minsToLabel(timeToMins(editRange.start))} – {minsToLabel(timeToMins(editRange.end))}
+                            {' '}({(timeToMins(editRange.end) - timeToMins(editRange.start)) / 60} hours)
+                          </small>
+                        )}
+                      </>
+                    ) : (
+                      <>
+                        <label htmlFor="edit-time-slot" className="required">New Time Slot</label>
+                        <select id="edit-time-slot"
+                          value={editSlots[0] ?? ''}
+                          onChange={(e) => setEditSlots(e.target.value ? [e.target.value] : [])}
+                          disabled={!editDate || isHoliday || availableSlots?.length === 0}>
+                          <option value="">
+                            {!editDate ? 'Select a date first' : availableSlots?.length === 0 ? 'No slots available' : 'Select a time slot'}
+                          </option>
+                          {(availableSlots ?? []).map((s) => (
+                            <option key={s.start} value={s.start}>{s.label}</option>
+                          ))}
+                        </select>
+                      </>
+                    )}
                   </div>
                 </>
               )}
