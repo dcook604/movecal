@@ -39,7 +39,7 @@ function row(label: string, value: string, trustedHtml = false) {
   </tr>`;
 }
 
-export function bookingDetailsHtml(b: BookingEmailData, includeContact = false, paymentConfirmed = false): string {
+export function bookingDetailsHtml(b: BookingEmailData, includeContact = false, paymentConfirmed = false, amountPaid?: string | null): string {
   const moveLabel = MOVE_TYPE_LABELS[b.moveType] ?? b.moveType;
   const dateStr = dayjs(b.startDatetime).format('dddd, MMMM D, YYYY');
   const timeStr = `${dayjs(b.startDatetime).format('h:mm A')} – ${dayjs(b.endDatetime).format('h:mm A')}`;
@@ -55,7 +55,8 @@ export function bookingDetailsHtml(b: BookingEmailData, includeContact = false, 
     ...(b.companyName ? [row('Company', b.companyName)] : []),
     ...(b.notes ? [row('Notes', b.notes)] : []),
     ...(includeContact ? [row('Email', b.residentEmail), row('Phone', b.residentPhone)] : []),
-    ...(paymentConfirmed ? [row('Payment', '<span style="color:#166534;font-weight:700">✓ Move fee confirmed paid</span>', true)] : [])
+    ...(paymentConfirmed ? [row('Payment', '<span style="color:#166534;font-weight:700">✓ Move fee confirmed paid</span>', true)] : []),
+    ...(paymentConfirmed && amountPaid ? [row('Amount Paid', `$${amountPaid}`)] : [])
   ];
 
   return `<table style="border-collapse:collapse;font-family:Arial,sans-serif;font-size:14px">
@@ -165,6 +166,12 @@ const DCOOK_EMAIL = 'dcook@spectrum4.ca';
 export async function sendPaymentConfirmationToDcook(prisma: PrismaClient, booking: BookingEmailData) {
   const moveLabel = MOVE_TYPE_LABELS[booking.moveType] ?? booking.moveType;
   const dateLabel = dayjs(booking.startDatetime).format('MMM D, YYYY');
+  const approval = await prisma.moveApproval.findFirst({
+    where: { moveRequestId: booking.id },
+    orderBy: { approvedAt: 'desc' },
+    include: { payment: { select: { amountPaid: true } } },
+  });
+  const amountPaid = approval?.payment.amountPaid?.toFixed(2) ?? null;
   await sendEmail(
     prisma,
     DCOOK_EMAIL,
@@ -172,7 +179,7 @@ export async function sendPaymentConfirmationToDcook(prisma: PrismaClient, booki
     emailWrapper(
       'Payment Confirmed — Booking Approved',
       `Payment has been received and the following booking has been confirmed. The resident (<strong>${esc(booking.residentEmail)}</strong>) has been notified of their approval.`,
-      bookingDetailsHtml(booking, true, true)
+      bookingDetailsHtml(booking, true, true, amountPaid)
     )
   );
 }

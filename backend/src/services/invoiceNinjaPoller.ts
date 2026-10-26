@@ -117,6 +117,8 @@ interface InvoiceNinjaInvoice {
   client_id: string;
   status_id: string;
   paid_date?: string;
+  amount?: number | string;
+  paid_to_date?: number | string;
   date?: string;
   line_items: InvoiceNinjaLineItem[];
 }
@@ -170,6 +172,10 @@ async function processInvoice(invoice: InvoiceNinjaInvoice, log: { error: (obj: 
            ?? 'unknown';
   }
 
+  const paidToDate = Number(invoice.paid_to_date);
+  const invoiceAmount = Number(invoice.amount);
+  const amountPaid = paidToDate > 0 ? paidToDate : Number.isFinite(invoiceAmount) ? invoiceAmount : null;
+
   await prisma.paymentsLedger.create({
     data: {
       clientId: invoice.client_id,
@@ -178,6 +184,7 @@ async function processInvoice(invoice: InvoiceNinjaInvoice, log: { error: (obj: 
       feeType,
       unit,
       paidAt,
+      amountPaid,
     },
   });
 

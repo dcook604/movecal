@@ -177,6 +177,7 @@ model PaymentsLedger {
   feeType         String         @map("fee_type")
   unit            String?
   paidAt          DateTime       @map("paid_at")
+  amountPaid      Decimal?       @map("amount_paid") @db.Decimal(10, 2)
   createdAt       DateTime       @default(now()) @map("created_at")
   dismissed       Boolean        @default(false)
   dismissedReason String?        @map("dismissed_reason")
