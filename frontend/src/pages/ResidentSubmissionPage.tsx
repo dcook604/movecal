@@ -440,6 +440,12 @@ export function ResidentSubmissionPage() {
           <p className="move-times-holiday">No Bookings Permitted on Statutory Holidays</p>
         </div>
 
+        <div className="late-arrival-notice" role="alert">
+          <strong>Late arrival policy:</strong> If you are late for your move, additional time will not
+          be granted. You will need to pay for another move slot on a different day. This policy is
+          strictly enforced.
+        </div>
+
         <form onSubmit={submit}>
           <fieldset className="form-group">
             <legend className="form-group-legend">Your Information</legend>

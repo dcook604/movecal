@@ -9,7 +9,7 @@ import { prisma } from '../prisma.js';
 import { identityFields } from '../utils/identity.js';
 import { assertNoConflict, assertNoDuplicateMoveRequest } from '../services/conflictService.js';
 import { requireAuth, requireRole } from '../middleware/auth.js';
-import { sendEmail, sendNotificationRecipients, bookingDetailsHtml, emailWrapper, sendPaymentConfirmationToDcook, sendPaymentReminderEmail } from '../services/emailService.js';
+import { sendEmail, sendNotificationRecipients, bookingDetailsHtml, lateArrivalNoticeHtml, emailWrapper, sendPaymentConfirmationToDcook, sendPaymentReminderEmail } from '../services/emailService.js';
 import { logAudit } from '../services/auditService.js';
 import { config } from '../config.js';
 import { validateMoveTime } from '../utils/moveTimeValidator.js';
@@ -181,7 +181,7 @@ export async function bookingRoutes(app: FastifyInstance) {
         emailWrapper(
           'Booking Approved',
           'Your open house booking has been automatically approved.',
-          bookingDetailsHtml(booking, false, true),
+          bookingDetailsHtml(booking, false, true) + lateArrivalNoticeHtml(),
           undefined,
           manageUrl
         )
@@ -210,7 +210,7 @@ export async function bookingRoutes(app: FastifyInstance) {
         emailWrapper(
           'Booking Approved',
           'Your move fee payment has been confirmed. Your booking has been automatically approved.',
-          bookingDetailsHtml(booking, false, true),
+          bookingDetailsHtml(booking, false, true) + lateArrivalNoticeHtml(),
           undefined,
           manageUrl
         )
@@ -242,7 +242,7 @@ export async function bookingRoutes(app: FastifyInstance) {
         emailWrapper(
           'Booking Request Received',
           'Your booking request has been submitted and is pending review.',
-          bookingDetailsHtml(booking),
+          bookingDetailsHtml(booking) + lateArrivalNoticeHtml(),
           undefined,
           manageUrl
         )
@@ -425,7 +425,7 @@ export async function bookingRoutes(app: FastifyInstance) {
         emailWrapper(
           'Booking Approved',
           'Your booking request has been approved. Please see the details below.',
-          bookingDetailsHtml(updated, false, paymentConfirmed),
+          bookingDetailsHtml(updated, false, paymentConfirmed) + lateArrivalNoticeHtml(),
           undefined,
           manageUrl
         )

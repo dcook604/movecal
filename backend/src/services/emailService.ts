@@ -65,6 +65,15 @@ export function bookingDetailsHtml(b: BookingEmailData, includeContact = false, 
   <p style="font-size:12px;color:#888;margin-top:16px">Reference: ${esc(b.id)}</p>`;
 }
 
+export const LATE_ARRIVAL_NOTICE =
+  'If you are late for your move, additional time will not be granted. You will need to pay for another move slot on a different day. This policy is strictly enforced.';
+
+export function lateArrivalNoticeHtml(): string {
+  return `<div style="margin-top:20px;padding:12px 16px;background:#fef2f2;border:1px solid #fca5a5;border-left:4px solid #dc2626;border-radius:6px;font-family:Arial,sans-serif;font-size:14px;line-height:1.5;color:#7f1d1d">
+    <strong>Late arrival policy:</strong> ${LATE_ARRIVAL_NOTICE}
+  </div>`;
+}
+
 export function emailWrapper(title: string, intro: string, body: string, footer?: string, manageUrl?: string): string {
   const manageButton = manageUrl
     ? `<p style="margin:24px 0;text-align:center">
