@@ -1,28 +1,36 @@
 import { FastifyInstance } from 'fastify';
-import { BookingStatus, NotifyEvent, UserRole } from '@prisma/client';
+import { BookingStatus, NotifyEvent, PaymentStatus, UserRole } from '@prisma/client';
 import { z } from 'zod';
 import bcrypt from 'bcryptjs';
 import { prisma } from '../prisma.js';
 import { requireRole } from '../middleware/auth.js';
 import { encrypt } from '../utils/crypto.js';
-import { sendEmail, sendPaymentConfirmationToDcook } from '../services/emailService.js';
+import { sendEmail } from '../services/emailService.js';
 import { logAudit } from '../services/auditService.js';
 import { BCRYPT_ROUNDS, MIN_PASSWORD_LENGTH } from '../utils/security.js';
-import { checkAndApproveMoveRequest } from '../services/moveApprovalService.js';
 
 export async function adminRoutes(app: FastifyInstance) {
   app.get('/api/admin/stats', { preHandler: [requireRole([UserRole.CONCIERGE, UserRole.COUNCIL, UserRole.PROPERTY_MANAGER])] }, async () => {
     const now = new Date();
     const yearStart = new Date(now.getFullYear(), 0, 1);
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const dayEnd = new Date(dayStart.getTime() + 86_400_000);
+    const open = { status: { in: [BookingStatus.PENDING, BookingStatus.SUBMITTED] } };
     const yearFilter = { moveDate: { gte: yearStart } };
-    const [total, approved, pending, thisMonth] = await Promise.all([
+    const [total, approved, pending, thisMonth, today, awaitingPayment, unmatchedPayments] = await Promise.all([
       prisma.booking.count({ where: yearFilter }),
       prisma.booking.count({ where: { status: BookingStatus.APPROVED, ...yearFilter } }),
-      prisma.booking.count({ where: { status: { in: [BookingStatus.PENDING, BookingStatus.SUBMITTED] }, ...yearFilter } }),
+      prisma.booking.count({ where: { ...open, ...yearFilter } }),
       prisma.booking.count({ where: { moveDate: { gte: monthStart } } }),
+      prisma.booking.count({ where: { status: BookingStatus.APPROVED, startDatetime: { gte: dayStart, lt: dayEnd } } }),
+      prisma.booking.count({ where: { ...open, paymentStatus: PaymentStatus.NONE, moveDate: { gte: dayStart } } }),
+      prisma.paymentsLedger.count({ where: { moveApprovals: { none: {} }, dismissed: false, reversedAt: null } }),
     ]);
-    return { totalBookings: total, approvedBookings: approved, pendingBookings: pending, bookingsThisMonth: thisMonth, year: now.getFullYear() };
+    return {
+      totalBookings: total, approvedBookings: approved, pendingBookings: pending, bookingsThisMonth: thisMonth,
+      movesToday: today, awaitingPayment, unmatchedPayments, year: now.getFullYear(),
+    };
   });
 
   app.get('/api/admin/settings', { preHandler: [requireRole([UserRole.COUNCIL, UserRole.PROPERTY_MANAGER])] }, async () => {
@@ -43,7 +51,8 @@ export async function adminRoutes(app: FastifyInstance) {
         includeResidentContactInApprovalEmails: z.boolean(),
         reminderEnabled: z.boolean(),
         invoiceNinjaEnabled: z.boolean(),
-        unpaidPaymentReminderEnabled: z.boolean()
+        unpaidPaymentReminderEnabled: z.boolean(),
+        paymentNotifyEmail: z.string().email().nullable().optional()
       })
       .parse(req.body);
     const existing = await prisma.appSetting.findFirst();
@@ -214,231 +223,6 @@ export async function adminRoutes(app: FastifyInstance) {
     });
 
     return user;
-  });
-
-  // Payments Ledger — retry matching all unmatched payments (includes already-approved bookings)
-  app.post('/api/admin/payments-ledger/retry-match', { preHandler: [requireRole([UserRole.COUNCIL, UserRole.PROPERTY_MANAGER])] }, async () => {
-    const { MoveType, BookingStatus } = await import('@prisma/client');
-
-    const unmatched = await prisma.paymentsLedger.findMany({
-      where: { moveApprovals: { none: {} }, dismissed: false, feeType: { not: 'unknown' }, unit: { not: null } },
-    });
-
-    let matchedCount = 0;
-
-    for (const payment of unmatched) {
-      const unit = payment.unit!;
-      const unitVariants = [unit];
-      if (unit.includes('-')) unitVariants.push(unit.split('-').pop()!);
-
-      const moveTypeMap: Record<string, typeof MoveType[keyof typeof MoveType]> = {
-        move_in: MoveType.MOVE_IN, move_out: MoveType.MOVE_OUT,
-        delivery: MoveType.DELIVERY, reno: MoveType.RENO,
-        suitcase_move: MoveType.SUITCASE_MOVE,
-      };
-      const moveTypeFilter = moveTypeMap[payment.feeType];
-      if (!moveTypeFilter) continue;
-
-      const booking = await prisma.booking.findFirst({
-        where: {
-          unit: { in: unitVariants },
-          moveType: moveTypeFilter,
-          status: { in: [BookingStatus.SUBMITTED, BookingStatus.PENDING, BookingStatus.APPROVED] },
-        },
-      });
-
-      if (!booking) continue;
-
-      const existing = await prisma.moveApproval.findFirst({ where: { invoiceId: payment.invoiceId } });
-      if (existing) continue;
-
-      await prisma.moveApproval.create({
-        data: {
-          moveRequestId: booking.id,
-          clientId: payment.clientId,
-          invoiceId: payment.invoiceId,
-          billingPeriod: payment.billingPeriod,
-        },
-      });
-
-      if (booking.status !== BookingStatus.APPROVED) {
-        await prisma.booking.update({
-          where: { id: booking.id },
-          data: { status: BookingStatus.APPROVED, approvedAt: new Date() },
-        });
-      }
-
-      await sendPaymentConfirmationToDcook(prisma, booking).catch(() => {});
-
-      matchedCount++;
-    }
-
-    return { matched: matchedCount };
-  });
-
-  // Payments Ledger
-  app.get('/api/admin/payments-ledger', { preHandler: [requireRole([UserRole.COUNCIL, UserRole.PROPERTY_MANAGER])] }, async (req) => {
-    const { month } = z.object({
-      month: z.string().regex(/^\d{4}-\d{2}$/).optional(),
-    }).parse(req.query);
-
-    // Default to current month if not provided
-    const now = new Date();
-    const activeMonth = month ?? `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-
-    const [matched, unmatched, dismissed] = await Promise.all([
-      prisma.paymentsLedger.findMany({
-        where: { moveApprovals: { some: {} }, billingPeriod: activeMonth },
-        include: { moveApprovals: true },
-        orderBy: { paidAt: 'desc' },
-      }),
-      prisma.paymentsLedger.findMany({
-        where: { moveApprovals: { none: {} }, dismissed: false },
-        orderBy: { paidAt: 'desc' },
-      }),
-      prisma.paymentsLedger.findMany({
-        where: { dismissed: true },
-        orderBy: { dismissedAt: 'desc' },
-      }),
-    ]);
-    return { unmatched, matched, dismissed, month: activeMonth };
-  });
-
-  app.patch('/api/admin/payments-ledger/:id/dismiss', { preHandler: [requireRole([UserRole.COUNCIL, UserRole.PROPERTY_MANAGER])] }, async (req, reply) => {
-    const id = z.string().uuid().parse((req.params as { id: string }).id);
-    const { reason } = z.object({ reason: z.string().min(1, 'Reason is required') }).parse(req.body);
-
-    const payment = await prisma.paymentsLedger.findUnique({ where: { id } });
-    if (!payment) return reply.status(404).send({ message: 'Payment not found' });
-
-    const updated = await prisma.paymentsLedger.update({
-      where: { id },
-      data: { dismissed: true, dismissedReason: reason, dismissedAt: new Date() },
-    });
-    return { payment: updated };
-  });
-
-  app.patch('/api/admin/payments-ledger/:id/restore', { preHandler: [requireRole([UserRole.COUNCIL, UserRole.PROPERTY_MANAGER])] }, async (req, reply) => {
-    const id = z.string().uuid().parse((req.params as { id: string }).id);
-
-    const payment = await prisma.paymentsLedger.findUnique({ where: { id } });
-    if (!payment) return reply.status(404).send({ message: 'Payment not found' });
-
-    const updated = await prisma.paymentsLedger.update({
-      where: { id },
-      data: { dismissed: false, dismissedReason: null, dismissedAt: null },
-    });
-    return { payment: updated };
-  });
-
-  app.patch('/api/admin/payments-ledger/:id/fee-type', { preHandler: [requireRole([UserRole.COUNCIL, UserRole.PROPERTY_MANAGER])] }, async (req, reply) => {
-    const id = z.string().uuid().parse((req.params as { id: string }).id);
-    const { feeType } = z.object({ feeType: z.enum(['move_in', 'move_out', 'delivery', 'reno', 'suitcase_move']) }).parse(req.body);
-
-    const payment = await prisma.paymentsLedger.findUnique({ where: { id } });
-    if (!payment) return reply.status(404).send({ message: 'Payment not found' });
-
-    const updated = await prisma.paymentsLedger.update({ where: { id }, data: { feeType } });
-
-    let approvalResult: { approved: boolean; invoiceId?: string } = { approved: false };
-
-    if (updated.unit) {
-      const { BookingStatus, MoveType } = await import('@prisma/client');
-      const moveTypeMap: Record<string, typeof MoveType[keyof typeof MoveType]> = {
-        move_in: MoveType.MOVE_IN, move_out: MoveType.MOVE_OUT,
-        delivery: MoveType.DELIVERY, reno: MoveType.RENO,
-        suitcase_move: MoveType.SUITCASE_MOVE,
-      };
-      const moveTypeFilter = moveTypeMap[feeType];
-
-      const unitVariants = [updated.unit];
-      if (updated.unit.includes('-')) unitVariants.push(updated.unit.split('-').pop()!);
-
-      const matchingBooking = moveTypeFilter ? await prisma.booking.findFirst({
-        where: {
-          unit: { in: unitVariants },
-          moveType: moveTypeFilter,
-          status: { in: [BookingStatus.SUBMITTED, BookingStatus.PENDING] },
-        },
-      }) : null;
-
-      if (matchingBooking) {
-        approvalResult = await checkAndApproveMoveRequest({
-          unit: updated.unit,
-          feeType,
-          billingPeriod: updated.billingPeriod,
-          bookingId: matchingBooking.id,
-        });
-      }
-    }
-
-    return { payment: updated, approved: approvalResult.approved };
-  });
-
-  // Search bookings for manual payment matching
-  app.get('/api/admin/payments-ledger/bookings-search', { preHandler: [requireRole([UserRole.COUNCIL, UserRole.PROPERTY_MANAGER])] }, async (req) => {
-    const { unit } = z.object({ unit: z.string().optional() }).parse(req.query);
-
-    const where = unit ? {
-      OR: [
-        { unit: { contains: unit, mode: 'insensitive' as const } },
-        { unit: { endsWith: `-${unit}` } },
-      ],
-    } : {};
-
-    const bookings = await prisma.booking.findMany({
-      where,
-      orderBy: { moveDate: 'desc' },
-      take: 50,
-    });
-
-    const approvals = await prisma.moveApproval.findMany({
-      where: { moveRequestId: { in: bookings.map(b => b.id) } },
-    });
-    const approvalByBooking = new Map(approvals.map(a => [a.moveRequestId, a]));
-
-    return bookings.map(b => ({
-      ...b,
-      paymentMatched: approvalByBooking.has(b.id),
-      paymentInvoiceId: approvalByBooking.get(b.id)?.invoiceId ?? null,
-    }));
-  });
-
-  // Manually match a payment to a booking
-  app.post('/api/admin/payments-ledger/:id/manual-match', { preHandler: [requireRole([UserRole.COUNCIL, UserRole.PROPERTY_MANAGER])] }, async (req, reply) => {
-    const id = z.string().uuid().parse((req.params as { id: string }).id);
-    const { bookingId } = z.object({ bookingId: z.string().uuid() }).parse(req.body);
-
-    const payment = await prisma.paymentsLedger.findUnique({ where: { id } });
-    if (!payment) return reply.status(404).send({ message: 'Payment not found' });
-
-    const existingApproval = await prisma.moveApproval.findFirst({ where: { invoiceId: payment.invoiceId } });
-    if (existingApproval) return reply.status(409).send({ message: 'Payment is already matched to a booking' });
-
-    const booking = await prisma.booking.findUnique({ where: { id: bookingId } });
-    if (!booking) return reply.status(404).send({ message: 'Booking not found' });
-
-    await prisma.moveApproval.create({
-      data: {
-        moveRequestId: bookingId,
-        clientId: payment.clientId,
-        invoiceId: payment.invoiceId,
-        billingPeriod: payment.billingPeriod,
-      },
-    });
-
-    if (booking.status !== BookingStatus.APPROVED) {
-      await prisma.booking.update({
-        where: { id: bookingId },
-        data: { status: BookingStatus.APPROVED, approvedAt: new Date() },
-      });
-    }
-
-    await sendPaymentConfirmationToDcook(prisma, booking).catch((err) => {
-      app.log.error({ err, bookingId }, 'Failed to send payment confirmation to dcook');
-    });
-
-    return { ok: true };
   });
 
   // Delete user

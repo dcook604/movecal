@@ -12,10 +12,10 @@ import { publicRoutes } from './routes/publicRoutes.js';
 import { bookingRoutes } from './routes/bookingRoutes.js';
 import { adminRoutes } from './routes/adminRoutes.js';
 import { historyRoutes } from './routes/historyRoutes.js';
+import { paymentRoutes } from './routes/paymentRoutes.js';
 import { systemRoutes } from './routes/systemRoutes.js';
 import { startInvoiceNinjaPoller } from './services/invoiceNinjaPoller.js';
 import { prisma } from './prisma.js';
-import { startAutoApprovalJob } from './services/autoApprovalService.js';
 import { startPaymentReminderJob } from './services/paymentReminderService.js';
 import { ZodError } from 'zod';
 
@@ -88,9 +88,9 @@ await app.register(publicRoutes);
 await app.register(bookingRoutes);
 await app.register(adminRoutes);
 await app.register(historyRoutes);
+await app.register(paymentRoutes);
 await app.register(systemRoutes);
 
-startAutoApprovalJob();
 startPaymentReminderJob();
 startInvoiceNinjaPoller(app.log);
 

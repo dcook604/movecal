@@ -170,9 +170,15 @@ export async function sendEarlyPaymentWarningEmail(prisma: PrismaClient, booking
   );
 }
 
-const DCOOK_EMAIL = 'dcook@spectrum4.ca';
+/** Recipient for payment-related staff emails; configured in admin settings. */
+async function paymentNotifyAddress(prisma: PrismaClient): Promise<string | null> {
+  const settings = await prisma.appSetting.findFirst({ select: { paymentNotifyEmail: true } });
+  return settings?.paymentNotifyEmail?.trim() || null;
+}
 
-export async function sendPaymentConfirmationToDcook(prisma: PrismaClient, booking: BookingEmailData) {
+export async function sendPaymentConfirmation(prisma: PrismaClient, booking: BookingEmailData) {
+  const to = await paymentNotifyAddress(prisma);
+  if (!to) return;
   const moveLabel = MOVE_TYPE_LABELS[booking.moveType] ?? booking.moveType;
   const dateLabel = dayjs(booking.startDatetime).format('MMM D, YYYY');
   const approval = await prisma.moveApproval.findFirst({
@@ -183,12 +189,28 @@ export async function sendPaymentConfirmationToDcook(prisma: PrismaClient, booki
   const amountPaid = approval?.payment.amountPaid?.toFixed(2) ?? null;
   await sendEmail(
     prisma,
-    DCOOK_EMAIL,
+    to,
     `Payment Confirmed — ${moveLabel} for Unit ${booking.unit} on ${dateLabel}`,
     emailWrapper(
       'Payment Confirmed — Booking Approved',
       `Payment has been received and the following booking has been confirmed. The resident (<strong>${esc(booking.residentEmail)}</strong>) has been notified of their approval.`,
       bookingDetailsHtml(booking, true, true, amountPaid)
+    )
+  );
+}
+
+export async function sendPaymentReversedNotice(prisma: PrismaClient, booking: BookingEmailData, invoiceId: string) {
+  const to = await paymentNotifyAddress(prisma);
+  if (!to) return;
+  const moveLabel = MOVE_TYPE_LABELS[booking.moveType] ?? booking.moveType;
+  await sendEmail(
+    prisma,
+    to,
+    `Payment Reversed — ${moveLabel} for Unit ${booking.unit} on ${dayjs(booking.startDatetime).format('MMM D, YYYY')}`,
+    emailWrapper(
+      'Payment Reversed — Action Needed',
+      `Invoice <strong>${esc(invoiceId)}</strong> was cancelled or reversed in Invoice Ninja after this booking was marked paid. The booking has been flagged as refunded; please review it.`,
+      bookingDetailsHtml(booking, true)
     )
   );
 }

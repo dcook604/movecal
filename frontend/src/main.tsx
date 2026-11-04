@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { BrowserRouter, Navigate, NavLink, Route, Routes, useLocation } from 'react-router-dom';
 import { PublicCalendarPage } from './pages/PublicCalendarPage';
@@ -6,35 +6,26 @@ import { BookingConfirmationPage } from './pages/BookingConfirmationPage';
 import { ResidentBookingPage } from './pages/ResidentBookingPage';
 import { ResidentSubmissionPage } from './pages/ResidentSubmissionPage';
 import { FindBookingPage } from './pages/FindBookingPage';
-import { AdminPage } from './pages/AdminPage';
+import { AdminLayout } from './pages/admin/AdminLayout';
+import { QueuePage } from './pages/admin/QueuePage';
+import { BookingDetailPage } from './pages/admin/BookingDetailPage';
+import { SettingsPage } from './pages/admin/SettingsPage';
+import { getStoredRole } from './auth/session';
 import { LobbyTVPage } from './pages/LobbyTVPage';
 import { PaymentsLedgerPage } from './pages/PaymentsLedgerPage';
 import { HistoryPage } from './pages/HistoryPage';
 import './styles.css';
 
-function getStoredRole(): string | null {
-  return localStorage.getItem('movecal_role');
-}
-
 function Nav() {
   const { pathname } = useLocation();
-  const [role, setRole] = useState(getStoredRole);
-
-  useEffect(() => {
-    const update = () => setRole(getStoredRole());
-    window.addEventListener('movecal-auth', update);
-    return () => window.removeEventListener('movecal-auth', update);
-  }, []);
 
   // Hide nav on TV mode — full-screen display
   if (pathname === '/tv') return null;
   return (
     <nav className="site-nav">
-      <NavLink to="/">Calendar</NavLink>
+      <NavLink to="/" end>Calendar</NavLink>
       <NavLink to="/submit">Resident Submit</NavLink>
       <NavLink to="/admin">Admin</NavLink>
-      {role && <NavLink to="/admin/history">History</NavLink>}
-      {role === 'PROPERTY_MANAGER' && <NavLink to="/admin/payments">Payments</NavLink>}
       <NavLink to="/tv">Lobby TV</NavLink>
     </nav>
   );
@@ -58,9 +49,13 @@ function App() {
         <Route path="/find-booking"    element={<FindBookingPage />} />
         <Route path="/booking/:id"              element={<ResidentBookingPage />} />
         <Route path="/booking/:id/confirmation" element={<BookingConfirmationPage />} />
-        <Route path="/admin"           element={<AdminPage />} />
-        <Route path="/admin/history"   element={<RequireAuth><HistoryPage /></RequireAuth>} />
-        <Route path="/admin/payments"  element={<PaymentsLedgerPage />} />
+        <Route path="/admin" element={<AdminLayout />}>
+          <Route index element={<QueuePage />} />
+          <Route path="bookings/:id" element={<BookingDetailPage />} />
+          <Route path="payments" element={<PaymentsLedgerPage />} />
+          <Route path="history" element={<HistoryPage />} />
+          <Route path="settings" element={<SettingsPage />} />
+        </Route>
         <Route path="/tv"              element={<LobbyTVPage />} />
       </Routes>
     </BrowserRouter>

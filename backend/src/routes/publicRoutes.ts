@@ -6,8 +6,16 @@ import { sendNotificationRecipients, sendEmail, bookingDetailsHtml, emailWrapper
 import { assertNoConflict, assertNoDuplicateMoveRequest } from '../services/conflictService.js';
 import { validateMoveTime } from '../utils/moveTimeValidator.js';
 import { config } from '../config.js';
+import { diffFields, logAudit } from '../services/auditService.js';
+import { getSystemUserId } from '../services/paymentService.js';
 import dayjs from 'dayjs';
 import { escapeHtml as esc, safeEqual } from '../utils/security.js';
+
+// Resident actions are logged against the system concierge account (audit rows need an actor).
+async function auditResident(action: string, bookingId: string, metadata?: Record<string, any>) {
+  const actorId = await getSystemUserId();
+  if (actorId) await logAudit(prisma, actorId, action, bookingId, metadata).catch(() => {});
+}
 
 export async function publicRoutes(app: FastifyInstance) {
   app.get('/api/public/taken-slots', async (req) => {
@@ -222,6 +230,9 @@ export async function publicRoutes(app: FastifyInstance) {
         });
       });
 
+      await auditResident('BOOKING_UPDATED_BY_RESIDENT', booking.id, {
+        changes: diffFields(booking, updated, ['startDatetime', 'endDatetime', 'notes', 'elevatorRequired', 'loadingBayRequired']),
+      });
       await sendUpdateNotification(prisma, updated, app.log);
       return bookingToResponse(updated);
     }
@@ -238,6 +249,9 @@ export async function publicRoutes(app: FastifyInstance) {
 
     const updated = await prisma.booking.update({ where: { id: booking.id }, data });
 
+    await auditResident('BOOKING_UPDATED_BY_RESIDENT', booking.id, {
+      changes: diffFields(booking, updated, ['notes', 'elevatorRequired', 'loadingBayRequired']),
+    });
     await sendUpdateNotification(prisma, updated, app.log);
     return bookingToResponse(updated);
   });
@@ -279,8 +293,9 @@ export async function publicRoutes(app: FastifyInstance) {
 
     const updated = await prisma.booking.update({
       where: { id },
-      data: { status: BookingStatus.CANCELLED },
+      data: { status: BookingStatus.CANCELLED, statusReason: 'Cancelled by resident' },
     });
+    await auditResident('BOOKING_CANCELLED_BY_RESIDENT', booking.id);
 
     // Notify admin recipients of cancellation
     const moveLabel = MOVE_TYPE_LABELS[updated.moveType] ?? updated.moveType;

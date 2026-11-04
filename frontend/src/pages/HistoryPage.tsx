@@ -1,7 +1,9 @@
 import { FormEvent, useCallback, useEffect, useRef, useState } from 'react';
 import axios from 'axios';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { api } from '../api';
 import { parseBookingTime } from '../utils/bookingTime';
+import { useAdmin } from './admin/AdminLayout';
 import '../styles/history.css';
 
 type Strength = 'strong' | 'weak';
@@ -19,14 +21,6 @@ interface RelatedResponse {
   contacts: { email: string | null; phone: string | null; emailShared: boolean; phoneShared: boolean };
   related: Related[];
 }
-interface Details extends Omit<Result, 'matchedOn' | 'linkedUnits' | 'linkStrength' | 'sharedContact'> {
-  companyName: string | null; elevatorRequired: boolean; loadingBayRequired: boolean; notes: string | null;
-  createdAt: string; updatedAt: string; approvedAt: string | null;
-  createdBy: { name: string; role: string }; approvedBy: { name: string; role: string } | null;
-  paymentMatched: boolean; paymentInvoiceId: string | null;
-  documents: { id: string; originalName: string; mimeType: string }[];
-  auditLogs: { id: string; action: string; timestamp: string; actor: { name: string } }[];
-}
 interface SharedContact { id: string; kind: 'EMAIL' | 'PHONE'; value: string; label: string | null }
 
 const STATUSES = ['SUBMITTED', 'PENDING', 'APPROVED', 'REJECTED', 'CANCELLED'];
@@ -42,8 +36,9 @@ function errMsg(e: unknown) {
 }
 
 export function HistoryPage() {
-  const role = localStorage.getItem('movecal_role');
-  const canManage = role === 'COUNCIL' || role === 'PROPERTY_MANAGER';
+  const { canManage } = useAdmin();
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
 
   const [q, setQ] = useState('');
   const [status, setStatus] = useState('');
@@ -59,8 +54,6 @@ export function HistoryPage() {
 
   const [drawer, setDrawer] = useState<RelatedResponse | null>(null);
   const [drawerLoading, setDrawerLoading] = useState(false);
-  const [details, setDetails] = useState<Details | null>(null);
-  const [detailsLoading, setDetailsLoading] = useState(false);
   const [contacts, setContacts] = useState<SharedContact[]>([]);
   const [showContacts, setShowContacts] = useState(false);
   const [newContact, setNewContact] = useState({ kind: 'PHONE', value: '', label: '' });
@@ -92,6 +85,11 @@ export function HistoryPage() {
     return () => clearTimeout(t);
   }, [runSearch]);
 
+  useEffect(() => {
+    const related = searchParams.get('related');
+    if (related) openDrawer(related);
+  }, [searchParams]);
+
   const loadContacts = async () => {
     try { setContacts((await api.get('/api/admin/shared-contacts')).data); } catch (e) { setError(errMsg(e)); }
   };
@@ -104,22 +102,8 @@ export function HistoryPage() {
     finally { setDrawerLoading(false); }
   };
 
-  const openDetails = async (bookingId: string) => {
-    setDetailsLoading(true); setDetails(null);
-    try { setDetails((await api.get(`/api/admin/bookings/${bookingId}/details`)).data); }
-    catch (e) { setError(errMsg(e)); }
-    finally { setDetailsLoading(false); }
-  };
+  const openDetails = (bookingId: string) => navigate(`/admin/bookings/${bookingId}`);
 
-  const downloadDocument = async (docId: string, name: string) => {
-    try {
-      const res = await api.get(`/api/admin/documents/${docId}`, { responseType: 'blob' });
-      const url = URL.createObjectURL(res.data);
-      const a = document.createElement('a');
-      a.href = url; a.download = name; a.click();
-      URL.revokeObjectURL(url);
-    } catch (e) { setError(errMsg(e)); }
-  };
 
   const addContact = async (kind: string, value: string, lbl?: string) => {
     try {
@@ -230,46 +214,6 @@ export function HistoryPage() {
           </div>
         )}
       </section>
-
-      {(details || detailsLoading) && (
-        <aside className="history-drawer wide" role="dialog" aria-label="Move details">
-          <button type="button" className="history-link close" onClick={() => setDetails(null)}>Close</button>
-          {detailsLoading && <p>Loading…</p>}
-          {details && (
-            <>
-              <h2>{label(details.moveType)} · Unit {details.unit}</h2>
-              <p><span className={`history-status ${details.status.toLowerCase()}`}>{label(details.status)}</span></p>
-              <dl className="history-details">
-                <dt>Date</dt><dd>{fmtDate(details.moveDate)}, {fmtTime(details)}</dd>
-                <dt>Resident</dt><dd>{details.residentName || '—'}</dd>
-                <dt>Email</dt><dd>{details.residentEmail || '—'}</dd>
-                <dt>Phone</dt><dd>{details.residentPhone || '—'}</dd>
-                {details.companyName && (<><dt>Company</dt><dd>{details.companyName}</dd></>)}
-                <dt>Elevator</dt><dd>{details.elevatorRequired ? 'Yes' : 'No'}</dd>
-                <dt>Loading bay</dt><dd>{details.loadingBayRequired ? 'Yes' : 'No'}</dd>
-                <dt>Payment</dt><dd>{details.paymentMatched ? `Matched${details.paymentInvoiceId ? ` (invoice ${details.paymentInvoiceId})` : ''}` : 'Not matched'}</dd>
-                <dt>Notes</dt><dd>{details.notes || '—'}</dd>
-                <dt>Created</dt><dd>{new Date(details.createdAt).toLocaleString()} by {details.createdBy.name}</dd>
-                {details.approvedAt && (<><dt>Approved</dt><dd>{new Date(details.approvedAt).toLocaleString()}{details.approvedBy ? ` by ${details.approvedBy.name}` : ''}</dd></>)}
-                <dt>Last updated</dt><dd>{new Date(details.updatedAt).toLocaleString()}</dd>
-              </dl>
-              <h3>Documents</h3>
-              {details.documents.length ? (
-                <ul>{details.documents.map((d) => (
-                  <li key={d.id}><button type="button" className="history-link" onClick={() => downloadDocument(d.id, d.originalName)}>{d.originalName}</button></li>
-                ))}</ul>
-              ) : <p className="history-hint">None.</p>}
-              <h3>Activity</h3>
-              {details.auditLogs.length ? (
-                <ul>{details.auditLogs.map((a) => (
-                  <li key={a.id}>{new Date(a.timestamp).toLocaleString()} · {label(a.action)} · {a.actor.name}</li>
-                ))}</ul>
-              ) : <p className="history-hint">No recorded activity.</p>}
-              <button type="button" onClick={() => { const id = details.id; setDetails(null); openDrawer(id); }}>View linked bookings in other units</button>
-            </>
-          )}
-        </aside>
-      )}
 
       {(drawer || drawerLoading) && (
         <aside className="history-drawer" role="dialog" aria-label="Related bookings">

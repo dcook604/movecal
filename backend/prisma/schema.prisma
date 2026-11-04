@@ -31,6 +31,18 @@ enum BookingStatus {
   CANCELLED
 }
 
+enum PaymentStatus {
+  NONE
+  PAID
+  REFUNDED
+}
+
+enum ApprovalSource {
+  PAYMENT
+  MANUAL
+  AUTO
+}
+
 enum NotifyEvent {
   APPROVED
   REJECTED
@@ -84,6 +96,9 @@ model Booking {
   notes              String?
   status             BookingStatus @default(SUBMITTED)
   approvedById       String?       @map("approved_by") @db.Uuid
+  paymentStatus      PaymentStatus @default(NONE) @map("payment_status")
+  approvalSource     ApprovalSource? @map("approval_source")
+  statusReason       String?       @map("status_reason")
   lastPaymentReminderSentAt      DateTime? @map("last_payment_reminder_sent_at")
   earlyPaymentReminderSentAt     DateTime? @map("early_payment_reminder_sent_at")
   editToken          String?       @unique @map("edit_token")
@@ -149,6 +164,8 @@ model AppSetting {
   reminderEnabled                             Boolean  @default(true) @map("reminder_enabled")
   invoiceNinjaEnabled                         Boolean  @default(false) @map("invoice_ninja_enabled")
   unpaidPaymentReminderEnabled                Boolean  @default(false) @map("unpaid_payment_reminder_enabled")
+  paymentNotifyEmail                          String?  @map("payment_notify_email")
+  invoiceNinjaCursor                          DateTime? @map("invoice_ninja_cursor")
   createdAt                                   DateTime @default(now()) @map("created_at")
   updatedAt                                   DateTime @updatedAt @map("updated_at")
 
@@ -178,6 +195,8 @@ model PaymentsLedger {
   unit            String?
   paidAt          DateTime       @map("paid_at")
   amountPaid      Decimal?       @map("amount_paid") @db.Decimal(10, 2)
+  invoiceDate     DateTime?      @map("invoice_date")
+  reversedAt      DateTime?      @map("reversed_at")
   createdAt       DateTime       @default(now()) @map("created_at")
   dismissed       Boolean        @default(false)
   dismissedReason String?        @map("dismissed_reason")
@@ -191,10 +210,12 @@ model MoveApproval {
   id            String         @id @default(uuid()) @db.Uuid
   moveRequestId String         @map("move_request_id")
   clientId      String         @map("client_id")
-  invoiceId     String         @map("invoice_id")
+  invoiceId     String         @unique @map("invoice_id")
   billingPeriod String         @map("billing_period")
   approvedAt    DateTime       @default(now()) @map("approved_at")
   payment       PaymentsLedger @relation(fields: [invoiceId], references: [invoiceId])
+
+  @@index([moveRequestId])
 
   @@map("move_approvals")
 }

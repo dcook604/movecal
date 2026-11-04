@@ -529,3 +529,55 @@
   .admin-stats-grid { grid-template-columns: repeat(2, 1fr); }
   .admin-login-card { padding: 24px 16px; }
 }
+
+/* ── Shared admin shell ─────────────────────────────────── */
+.admin-subnav { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; border-bottom: 1px solid #e2e8f0; margin-bottom: 20px; padding-bottom: 0; }
+.admin-subnav nav { display: flex; gap: 4px; flex-wrap: wrap; }
+.admin-subnav nav a { padding: 10px 16px; color: #475569; text-decoration: none; font-weight: 600; font-size: 0.95rem; border-bottom: 3px solid transparent; margin-bottom: -1px; }
+.admin-subnav nav a:hover { color: #0f172a; }
+.admin-subnav nav a.active { color: #1d6fa5; border-bottom-color: #3090d0; }
+.admin-subnav-user { display: flex; align-items: center; gap: 12px; font-size: 0.85rem; color: #64748b; }
+
+.modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 1000; display: flex; align-items: flex-start; justify-content: center; padding: 24px 16px; overflow-y: auto; }
+.modal-card { background: #fff; border-radius: 12px; padding: 28px 24px; width: 100%; max-width: 560px; box-shadow: 0 20px 40px rgba(0,0,0,0.3); margin-top: 16px; }
+
+/* ── Queue ──────────────────────────────────────────────── */
+.queue-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 20px; }
+.queue-tile { text-align: left; background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 14px 16px; cursor: pointer; font: inherit; }
+.queue-tile:hover { border-color: #3090d0; }
+.queue-tile--alert { border-color: #f59e0b; background: #fffbeb; }
+.queue-tile-value { font-size: 1.75rem; font-weight: 700; color: #0f172a; line-height: 1.1; }
+.queue-tile-label { font-size: 0.8rem; color: #64748b; margin-top: 4px; }
+.queue-toolbar { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: 14px; }
+.queue-tabs { display: flex; gap: 6px; flex-wrap: wrap; flex: 1; }
+.queue-tab { background: #f1f5f9; border: 0; border-radius: 999px; padding: 7px 14px; font: inherit; font-size: 0.875rem; font-weight: 600; color: #475569; cursor: pointer; }
+.queue-tab--active { background: #3090d0; color: #fff; }
+.queue-tab-count { margin-left: 6px; opacity: 0.8; font-weight: 500; }
+.queue-search { min-width: 220px; padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font: inherit; }
+
+.pay-badge { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 0.75rem; font-weight: 700; }
+.pay-badge--paid { background: #dcfce7; color: #166534; }
+.pay-badge--unpaid { background: #fef3c7; color: #92400e; }
+.pay-badge--refunded { background: #fee2e2; color: #991b1b; }
+.pay-badge--manual { background: #e0e7ff; color: #3730a3; }
+.pay-badge--exempt { background: #f1f5f9; color: #475569; }
+.booking-reason { margin-top: 6px; font-size: 0.85rem; color: #7f1d1d; }
+.booking-link { color: inherit; text-decoration: none; }
+.booking-link:hover { text-decoration: underline; }
+
+/* ── Booking detail / timeline ──────────────────────────── */
+.detail-grid { display: grid; grid-template-columns: 2fr 1fr; gap: 20px; }
+@media (max-width: 800px) { .detail-grid { grid-template-columns: 1fr; } }
+.detail-card { background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 18px 20px; margin-bottom: 16px; }
+.detail-card h3 { margin: 0 0 12px; font-size: 1rem; }
+.detail-dl { display: grid; grid-template-columns: 130px 1fr; gap: 6px 12px; margin: 0; font-size: 0.9rem; }
+.detail-dl dt { color: #64748b; }
+.detail-dl dd { margin: 0; color: #0f172a; }
+.timeline { list-style: none; margin: 0; padding: 0; }
+.timeline li { position: relative; padding: 0 0 16px 22px; border-left: 2px solid #e2e8f0; margin-left: 6px; }
+.timeline li::before { content: ''; position: absolute; left: -6px; top: 3px; width: 10px; height: 10px; border-radius: 50%; background: #3090d0; }
+.timeline li.timeline--money::before { background: #16a34a; }
+.timeline li.timeline--warn::before { background: #dc2626; }
+.timeline-title { font-weight: 600; font-size: 0.9rem; }
+.timeline-meta { font-size: 0.78rem; color: #64748b; }
+.timeline-detail { font-size: 0.82rem; color: #334155; margin-top: 2px; }

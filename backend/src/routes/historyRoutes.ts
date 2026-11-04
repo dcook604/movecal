@@ -191,14 +191,17 @@ export async function historyRoutes(app: FastifyInstance) {
         createdBy: { select: { name: true, role: true } },
         approvedBy: { select: { name: true, role: true } },
         documents: { select: { id: true, originalName: true, mimeType: true, uploadedAt: true }, orderBy: { uploadedAt: 'asc' } },
-        auditLogs: { select: { id: true, action: true, timestamp: true, actor: { select: { name: true } } }, orderBy: { timestamp: 'asc' } },
+        auditLogs: { select: { id: true, action: true, timestamp: true, metadataJson: true, actor: { select: { name: true } } }, orderBy: { timestamp: 'asc' } },
       },
     });
     if (!b) return reply.status(404).send({ message: 'Booking not found' });
-    const approval = await prisma.moveApproval.findFirst({ where: { moveRequestId: id } });
+    const approval = await prisma.moveApproval.findFirst({
+      where: { moveRequestId: id },
+      include: { payment: { select: { invoiceId: true, amountPaid: true, paidAt: true, feeType: true, reversedAt: true } } },
+    });
     const { editToken, residentEmailNorm, residentPhoneNorm, unitNorm, ...rest } = b;
     await logAudit(prisma, req.user.id, 'VIEW_BOOKING_DETAILS', id);
-    return { ...rest, paymentMatched: !!approval, paymentInvoiceId: approval?.invoiceId ?? null };
+    return { ...rest, paymentMatched: !!approval, paymentInvoiceId: approval?.invoiceId ?? null, payment: approval?.payment ?? null };
   });
 
   // Everything linked to one booking's resident, across units (identity drawer).

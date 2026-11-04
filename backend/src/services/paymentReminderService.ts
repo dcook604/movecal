@@ -1,4 +1,4 @@
-import { BookingStatus, MoveType, UserRole } from '@prisma/client';
+import { BookingStatus, MoveType, PaymentStatus, UserRole } from '@prisma/client';
 import { prisma } from '../prisma.js';
 import { sendPaymentReminderEmail, sendEarlyPaymentWarningEmail } from './emailService.js';
 import { logAudit } from './auditService.js';
@@ -13,12 +13,6 @@ export async function runPaymentReminders() {
   const systemUser = await prisma.user.findFirst({ where: { role: UserRole.CONCIERGE } });
   if (!systemUser) return;
 
-  // Collect booking IDs that already have a matched payment
-  const paidIds = new Set(
-    (await prisma.moveApproval.findMany({ select: { moveRequestId: true } }))
-      .map(a => a.moveRequestId)
-  );
-
   const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -26,6 +20,7 @@ export async function runPaymentReminders() {
   const bookings = await prisma.booking.findMany({
     where: {
       status: { in: [BookingStatus.SUBMITTED, BookingStatus.PENDING] },
+      paymentStatus: PaymentStatus.NONE,
       moveDate: { gte: today },
       OR: [
         { lastPaymentReminderSentAt: null },
@@ -34,7 +29,7 @@ export async function runPaymentReminders() {
     },
   });
 
-  const unpaidBookings = bookings.filter(b => !paidIds.has(b.id));
+  const unpaidBookings = bookings;
 
   // 30-minute early warning: MOVE_IN, MOVE_OUT, DELIVERY bookings with no payment after 30 min
   const earlyWarningTypes = new Set<MoveType>([MoveType.MOVE_IN, MoveType.MOVE_OUT, MoveType.DELIVERY]);

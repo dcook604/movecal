@@ -1,5 +1,5 @@
 import { FastifyInstance } from 'fastify';
-import { BookingStatus, MoveType, NotifyEvent, UserRole } from '@prisma/client';
+import { ApprovalSource, BookingStatus, MoveType, NotifyEvent, PaymentStatus, UserRole } from '@prisma/client';
 import dayjs from 'dayjs';
 import { z } from 'zod';
 import path from 'path';
@@ -9,11 +9,12 @@ import { prisma } from '../prisma.js';
 import { identityFields } from '../utils/identity.js';
 import { assertNoConflict, assertNoDuplicateMoveRequest } from '../services/conflictService.js';
 import { requireAuth, requireRole } from '../middleware/auth.js';
-import { sendEmail, sendNotificationRecipients, bookingDetailsHtml, lateArrivalNoticeHtml, emailWrapper, sendPaymentConfirmationToDcook, sendPaymentReminderEmail } from '../services/emailService.js';
-import { logAudit } from '../services/auditService.js';
+import { sendEmail, sendNotificationRecipients, bookingDetailsHtml, lateArrivalNoticeHtml, emailWrapper, sendPaymentConfirmation, sendPaymentReminderEmail } from '../services/emailService.js';
+import { diffFields, logAudit } from '../services/auditService.js';
 import { config } from '../config.js';
+import { escapeHtml as esc } from '../utils/security.js';
 import { validateMoveTime } from '../utils/moveTimeValidator.js';
-import { checkAndApproveMoveRequest } from '../services/moveApprovalService.js';
+import { autoMatchBooking } from '../services/paymentService.js';
 
 // ── Email / phone validation helpers ──────────────────────────────────
 const COMMON_TLDS = new Set([
@@ -98,7 +99,7 @@ export async function bookingRoutes(app: FastifyInstance) {
     const systemUser = await prisma.user.findFirst({ where: { role: UserRole.CONCIERGE } });
     if (!systemUser) return reply.status(500).send({ message: 'Seed concierge user first' });
 
-    const booking = await prisma.$transaction(async (tx) => {
+    let booking = await prisma.$transaction(async (tx) => {
       await assertNoDuplicateMoveRequest(tx, { unit: body.unit, moveDate: body.moveDate, moveType: body.moveType });
       await assertNoConflict(
         tx,
@@ -131,28 +132,24 @@ export async function bookingRoutes(app: FastifyInstance) {
     // Open house bookings are auto-approved immediately (no payment required)
     let openHouseAutoApproved = false;
     if (booking.moveType === MoveType.OPEN_HOUSE) {
-      await prisma.booking.update({
+      booking = await prisma.booking.update({
         where: { id: booking.id },
-        data: { status: BookingStatus.APPROVED, approvedAt: new Date() },
+        data: { status: BookingStatus.APPROVED, approvedAt: new Date(), approvalSource: ApprovalSource.AUTO },
       });
       openHouseAutoApproved = true;
     }
 
-    // Check if payment already exists for this booking (payment-first flow)
+    // Payment-first flow: if a matching invoice was already paid, link it (and approve) now.
     let paymentConfirmed = false;
-    if (!openHouseAutoApproved && (booking.moveType === MoveType.MOVE_IN || booking.moveType === MoveType.MOVE_OUT || booking.moveType === MoveType.FURNISHED_MOVE || booking.moveType === MoveType.SUITCASE_MOVE)) {
-      const billingPeriod = dayjs(booking.moveDate).format('YYYY-MM');
-      const feeType = booking.moveType === MoveType.MOVE_IN ? 'move_in' : booking.moveType === MoveType.FURNISHED_MOVE ? 'furnished_move' : booking.moveType === MoveType.SUITCASE_MOVE ? 'suitcase_move' : 'move_out';
-      const approvalResult = await checkAndApproveMoveRequest({
-        unit: booking.unit,
-        feeType,
-        billingPeriod,
-        bookingId: booking.id,
-      }).catch((err) => {
+    if (!openHouseAutoApproved) {
+      const match = await autoMatchBooking(booking).catch((err) => {
         app.log.error({ err, bookingId: booking.id }, 'Invoice approval check failed');
-        return { approved: false };
+        return null;
       });
-      paymentConfirmed = approvalResult.approved;
+      if (match?.ok) {
+        booking = match.booking;
+        paymentConfirmed = match.transitioned;
+      }
     }
 
     const moveTypeLabel = { MOVE_IN: 'Move In', MOVE_OUT: 'Move Out', DELIVERY: 'Delivery', RENO: 'Renovation', OPEN_HOUSE: 'Open House', FURNISHED_MOVE: 'Furnished Move', SUITCASE_MOVE: 'Suitcase Move' }[booking.moveType] ?? booking.moveType;
@@ -218,8 +215,8 @@ export async function bookingRoutes(app: FastifyInstance) {
         app.log.error({ err, bookingId: booking.id, email: body.residentEmail }, 'Failed to send auto-approval email');
       });
 
-      await sendPaymentConfirmationToDcook(prisma, booking).catch((err) => {
-        app.log.error({ err, bookingId: booking.id }, 'Failed to send payment confirmation to dcook');
+      await sendPaymentConfirmation(prisma, booking).catch((err) => {
+        app.log.error({ err, bookingId: booking.id }, 'Failed to send payment confirmation');
       });
     } else {
       await sendNotificationRecipients(
@@ -297,13 +294,16 @@ export async function bookingRoutes(app: FastifyInstance) {
           editToken: nanoid(32),
           status: BookingStatus.APPROVED,
           approvedById: user.id,
-          approvedAt: new Date()
+          approvedAt: new Date(),
+          approvalSource: ApprovalSource.MANUAL
         }
       });
     });
 
     await logAudit(prisma, user.id, 'BOOKING_QUICK_APPROVED', booking.id, { source: 'concierge_quick_entry' });
-    return booking;
+    // If the resident already paid, link the invoice (no state change: it is already approved).
+    const match = await autoMatchBooking(booking).catch(() => null);
+    return match?.ok ? match.booking : booking;
   });
 
   app.get('/api/bookings/:id', { preHandler: [requireAuth] }, async (req) => {
@@ -329,6 +329,8 @@ export async function bookingRoutes(app: FastifyInstance) {
     const body = z
       .object({
         status: z.nativeEnum(BookingStatus).optional(),
+        reason: z.string().trim().min(1).max(500).optional(),
+        approveWithoutPayment: z.boolean().optional(),
         startDatetime: z.coerce.date().optional(),
         endDatetime: z.coerce.date().optional(),
         overrideConflict: z.boolean().optional(),
@@ -349,6 +351,20 @@ export async function bookingRoutes(app: FastifyInstance) {
     const existing = await prisma.booking.findUniqueOrThrow({ where: { id: bookingId } });
     const overrideRoles: UserRole[] = [UserRole.COUNCIL, UserRole.PROPERTY_MANAGER];
     const allowOverride = overrideRoles.includes(user.role) && !!body.overrideConflict;
+
+    const statusChanging = body.status !== undefined && body.status !== existing.status;
+    if (statusChanging && (body.status === BookingStatus.REJECTED || body.status === BookingStatus.CANCELLED) && !body.reason) {
+      return reply.status(400).send({ message: 'A reason is required when rejecting or cancelling a booking.' });
+    }
+    // Approving a fee-bearing booking with no matched payment must be an explicit decision.
+    if (
+      statusChanging && body.status === BookingStatus.APPROVED &&
+      existing.paymentStatus === PaymentStatus.NONE &&
+      existing.moveType !== MoveType.OPEN_HOUSE &&
+      !body.approveWithoutPayment
+    ) {
+      return reply.status(409).send({ code: 'PAYMENT_REQUIRED', message: 'No payment is matched to this booking. Confirm to approve without payment.' });
+    }
 
     // Validate move time restrictions if times or move type are being updated
     if ((body.startDatetime || body.endDatetime || body.moveType) && !allowOverride) {
@@ -399,16 +415,27 @@ export async function bookingRoutes(app: FastifyInstance) {
           ...(body.elevatorRequired !== undefined && { elevatorRequired: body.elevatorRequired }),
           ...identityFields(body),
           ...(body.loadingBayRequired !== undefined && { loadingBayRequired: body.loadingBayRequired }),
-          ...(body.status === BookingStatus.APPROVED && { approvedById: user.id, approvedAt: new Date() }),
+          ...(statusChanging && body.status === BookingStatus.APPROVED && {
+            approvedById: user.id,
+            approvedAt: new Date(),
+            approvalSource: existing.paymentStatus === PaymentStatus.PAID ? ApprovalSource.PAYMENT : ApprovalSource.MANUAL,
+          }),
+          ...(statusChanging && (body.status === BookingStatus.REJECTED || body.status === BookingStatus.CANCELLED) && { statusReason: body.reason }),
         }
       });
     });
 
     if (allowOverride) await logAudit(prisma, user.id, 'CONFLICT_OVERRIDE', updated.id, { old: existing, new: updated });
 
+    const changes = diffFields(existing, updated, [
+      'residentName', 'residentEmail', 'residentPhone', 'unit', 'companyName', 'moveType',
+      'startDatetime', 'endDatetime', 'elevatorRequired', 'loadingBayRequired', 'notes',
+    ]);
+    if (changes) await logAudit(prisma, user.id, 'BOOKING_UPDATED', updated.id, { changes });
+
     const manageUrl = updated.editToken ? `${config.frontendOrigins[0]}/booking/${updated.id}?token=${updated.editToken}` : undefined;
 
-    if (body.status === BookingStatus.APPROVED) {
+    if (statusChanging && body.status === BookingStatus.APPROVED) {
       const [settings, moveApproval] = await Promise.all([
         prisma.appSetting.findFirst(),
         prisma.moveApproval.findFirst({ where: { moveRequestId: updated.id } }),
@@ -446,10 +473,10 @@ export async function bookingRoutes(app: FastifyInstance) {
         app.log.error({ err, bookingId: updated.id, event: 'APPROVED' }, 'Failed to send approval notification');
       });
 
-      await logAudit(prisma, user.id, 'BOOKING_APPROVED', updated.id, { status: updated.status });
+      await logAudit(prisma, user.id, 'BOOKING_APPROVED', updated.id, { status: updated.status, source: updated.approvalSource, withoutPayment: updated.paymentStatus === PaymentStatus.NONE });
     }
 
-    if (body.status === BookingStatus.REJECTED) {
+    if (statusChanging && body.status === BookingStatus.REJECTED) {
       const rejectedMoveLabel = { MOVE_IN: 'Move In', MOVE_OUT: 'Move Out', DELIVERY: 'Delivery', RENO: 'Renovation', OPEN_HOUSE: 'Open House', FURNISHED_MOVE: 'Furnished Move', SUITCASE_MOVE: 'Suitcase Move' }[updated.moveType] ?? updated.moveType;
       const rejectedSubject = `Booking Not Approved — ${rejectedMoveLabel} on ${dayjs(updated.startDatetime).format('MMM D, YYYY')}`;
 
@@ -459,7 +486,7 @@ export async function bookingRoutes(app: FastifyInstance) {
         rejectedSubject,
         emailWrapper(
           'Booking Not Approved',
-          'Unfortunately your booking request could not be approved. Please contact building management if you have any questions.',
+          `Unfortunately your booking request could not be approved.${body.reason ? ` <strong>Reason:</strong> ${esc(body.reason)}.` : ''} Please contact building management if you have any questions.`,
           bookingDetailsHtml(updated),
           undefined,
           manageUrl
@@ -481,16 +508,25 @@ export async function bookingRoutes(app: FastifyInstance) {
         app.log.error({ err, bookingId: updated.id, event: 'REJECTED' }, 'Failed to send rejection notification');
       });
 
-      await logAudit(prisma, user.id, 'BOOKING_REJECTED', updated.id, { status: updated.status });
+      await logAudit(prisma, user.id, 'BOOKING_REJECTED', updated.id, { status: updated.status, reason: body.reason });
     }
 
     return updated;
   });
 
-  app.delete('/api/admin/bookings/:id', { preHandler: [requireRole([UserRole.CONCIERGE, UserRole.COUNCIL, UserRole.PROPERTY_MANAGER])] }, async (req) => {
+  // Hard delete is limited to managers and to dead bookings (rejected/cancelled, never paid).
+  // Everything else should be cancelled with a reason so the history is preserved.
+  app.delete('/api/admin/bookings/:id', { preHandler: [requireRole([UserRole.COUNCIL, UserRole.PROPERTY_MANAGER])] }, async (req, reply) => {
     const bookingId = uuidSchema.parse((req.params as { id: string }).id);
     const user = req.user;
     const existing = await prisma.booking.findUniqueOrThrow({ where: { id: bookingId } });
+
+    if (existing.status !== BookingStatus.REJECTED && existing.status !== BookingStatus.CANCELLED) {
+      return reply.status(409).send({ message: 'Only rejected or cancelled bookings can be deleted. Cancel the booking instead to keep its history.' });
+    }
+    if (existing.paymentStatus !== PaymentStatus.NONE) {
+      return reply.status(409).send({ message: 'This booking has a payment matched. Unmatch the payment first.' });
+    }
 
     // Nullify audit log FK references then delete booking (documents cascade automatically)
     await prisma.$transaction([
@@ -502,7 +538,8 @@ export async function bookingRoutes(app: FastifyInstance) {
       residentName: existing.residentName,
       unit: existing.unit,
       moveType: existing.moveType,
-      status: existing.status
+      status: existing.status,
+      statusReason: existing.statusReason
     });
 
     return { message: 'Booking deleted successfully' };

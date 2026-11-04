@@ -1,70 +1,50 @@
 import dayjs from 'dayjs';
-import { BookingStatus, MoveType } from '@prisma/client';
 import { prisma } from '../prisma.js';
 import { config } from '../config.js';
-import { checkAndApproveMoveRequest } from './moveApprovalService.js';
-import { sendPaymentConfirmationToDcook } from './emailService.js';
+import { classifyFeeText, extractUnit, FeeType, FEE_TYPES, isFeeType } from './feeClassifier.js';
+import { autoMatchPayment, markPaymentReversed } from './paymentService.js';
+import { sendPaymentConfirmation, sendPaymentReversedNotice } from './emailService.js';
 
 const POLL_INTERVAL_MS = 5 * 60 * 1000; // every 5 minutes
-// On startup, look back 24 hours to catch anything missed while the server was down
-const STARTUP_LOOKBACK_HOURS = 24;
+// First run (no stored cursor): look back this far to catch anything missed.
+const INITIAL_LOOKBACK_HOURS = 24;
+// Re-read a little before the stored cursor so clock skew can't drop an invoice.
+const CURSOR_OVERLAP_MS = 2 * 60 * 1000;
+const PAGE_SIZE = 100;
+const MAX_PAGES = 50;
 
-let lastPollAt: Date | null = null;
+// Invoice Ninja invoice status ids
+const STATUS_PAID = 4;
+const STATUS_CANCELLED = 5;
+const STATUS_REVERSED = 6;
 
-// ── Fee-type classification ────────────────────────────────────────
+type Logger = { info: (msg: string) => void; error: (obj: object, msg: string) => void };
 
-function classifyFeeType(productKey: string, notes: string): 'move_in' | 'move_out' | 'delivery' | 'reno' | 'suitcase_move' | null {
-  const normalized = (productKey + ' ' + notes).toLowerCase().replace(/[^a-z0-9 ]/g, ' ');
-  const deliveryPattern    = /\b(deliver(?:y|ies|ed)?)\b/;
-  const renoPattern        = /\b(reno|renovation|renovate)\b/;
-  const moveInPattern      = /\b(move in|moving in|movein|move-in|into)\b/;
-  const moveOutPattern     = /\b(move out|moving out|moveout|move-out|out|exit|vacate)\b/;
-  const suitcaseMovePattern = /\b(suitcase|suitcase move|suitcase-move)\b/;
-  if (deliveryPattern.test(normalized))    return 'delivery';
-  if (renoPattern.test(normalized))        return 'reno';
-  if (moveInPattern.test(normalized))      return 'move_in';
-  if (moveOutPattern.test(normalized))     return 'move_out';
-  if (suitcaseMovePattern.test(normalized)) return 'suitcase_move';
-  return null;
+// ── LLM fallback for line items the rules can't classify ───────────
+
+const CLASSIFY_PROMPT = (productKey: string, notes: string) =>
+  `Given this invoice line item:\nItem: "${productKey}"\nDescription: "${notes}"\nClassify this fee. Reply with only one of: ${FEE_TYPES.map((f) => `"${f}"`).join(', ')}, "none". Use "none" if the item is not a move/delivery/reno fee (e.g. key deposit, parking, bike room, amenity booking).`;
+
+function parseLlmAnswer(text: string): FeeType | null {
+  const t = text.trim().toLowerCase();
+  return isFeeType(t) ? t : null;
 }
 
-function feeTypeToMoveType(feeType: string): MoveType | null {
-  if (feeType === 'move_in')   return MoveType.MOVE_IN;
-  if (feeType === 'move_out')  return MoveType.MOVE_OUT;
-  if (feeType === 'delivery')  return MoveType.DELIVERY;
-  if (feeType === 'reno')      return MoveType.RENO;
-  if (feeType === 'suitcase_move') return MoveType.SUITCASE_MOVE;
-  return null;
-}
-
-async function classifyWithDeepSeek(productKey: string, notes: string): Promise<'move_in' | 'move_out' | 'delivery' | 'reno' | null> {
+async function classifyWithDeepSeek(productKey: string, notes: string): Promise<FeeType | null> {
   if (!config.deepseekApiKey) return null;
   try {
     const response = await fetch('https://api.deepseek.com/chat/completions', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${config.deepseekApiKey}`,
-      },
-      body: JSON.stringify({
-        model: 'deepseek-chat',
-        max_tokens: 10,
-        messages: [{
-          role: 'user',
-          content: `Given this invoice line item:\nItem: "${productKey}"\nDescription: "${notes}"\nClassify this fee. Reply with only one of: "move_in", "move_out", "delivery", "reno", "none". Use "none" if the item is not a move/delivery/reno fee (e.g. key deposit, parking, bike room, amenity booking).`,
-        }],
-      }),
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${config.deepseekApiKey}` },
+      body: JSON.stringify({ model: 'deepseek-chat', max_tokens: 10, messages: [{ role: 'user', content: CLASSIFY_PROMPT(productKey, notes) }] }),
     });
     if (!response.ok) return null;
-    const json = await response.json() as { choices?: { message?: { content?: string } }[] };
-    const text = json.choices?.[0]?.message?.content?.trim().toLowerCase() ?? '';
-    if (text === 'none') return null;
-    if (text === 'move_in' || text === 'move_out' || text === 'delivery' || text === 'reno') return text as 'move_in' | 'move_out' | 'delivery' | 'reno';
-  } catch { /* fall through */ }
-  return null;
+    const json = (await response.json()) as { choices?: { message?: { content?: string } }[] };
+    return parseLlmAnswer(json.choices?.[0]?.message?.content ?? '');
+  } catch { return null; }
 }
 
-async function classifyWithClaude(productKey: string, notes: string): Promise<'move_in' | 'move_out' | 'delivery' | 'reno' | null> {
+async function classifyWithClaude(productKey: string, notes: string): Promise<FeeType | null> {
   if (!config.anthropicApiKey) return null;
   try {
     const Anthropic = (await import('@anthropic-ai/sdk')).default;
@@ -72,36 +52,10 @@ async function classifyWithClaude(productKey: string, notes: string): Promise<'m
     const message = await client.messages.create({
       model: 'claude-sonnet-4-6',
       max_tokens: 10,
-      messages: [{
-        role: 'user',
-        content: `Given this invoice line item:\nItem: "${productKey}"\nDescription: "${notes}"\nClassify this fee. Reply with only one of: "move_in", "move_out", "delivery", "reno", "none". Use "none" if the item is not a move/delivery/reno fee (e.g. key deposit, parking, bike room, amenity booking).`,
-      }],
+      messages: [{ role: 'user', content: CLASSIFY_PROMPT(productKey, notes) }],
     });
-    const text = message.content[0].type === 'text' ? message.content[0].text.trim().toLowerCase() : '';
-    if (text === 'none') return null;
-    if (text === 'move_in' || text === 'move_out' || text === 'delivery' || text === 'reno') return text as 'move_in' | 'move_out' | 'delivery' | 'reno';
-  } catch { /* fall through */ }
-  return null;
-}
-
-// ── Unit extraction ────────────────────────────────────────────────
-
-function extractUnit(text: string): string | null {
-  if (!text) return null;
-  const patterns = [
-    /\b(?:unit|apt|suite|apartment)\s*#?\s*([a-z0-9][-a-z0-9]*)/i,
-    /#\s*([a-z0-9][-a-z0-9]*)/i,
-    /\b([A-Z]\d{1,2}-\d{2,4})\b/,   // T4-3102 style
-    /\b(\d{3,4})\b/,                  // bare 3–4 digit unit numbers
-  ];
-  for (const re of patterns) {
-    const m = text.match(re);
-    if (m) {
-      const unit = (m[2] ?? m[1]).trim();
-      if (unit.length <= 20) return unit;
-    }
-  }
-  return null;
+    return parseLlmAnswer(message.content[0].type === 'text' ? message.content[0].text : '');
+  } catch { return null; }
 }
 
 // ── Invoice Ninja API ──────────────────────────────────────────────
@@ -123,60 +77,65 @@ interface InvoiceNinjaInvoice {
   line_items: InvoiceNinjaLineItem[];
 }
 
-async function fetchPaidInvoices(since: Date): Promise<InvoiceNinjaInvoice[]> {
+async function fetchInvoices(statusId: number, since: Date): Promise<InvoiceNinjaInvoice[]> {
   const base = config.invoiceNinjaUrl!.replace(/\/$/, '');
-  const url = new URL(`${base}/api/v1/invoices`);
-  url.searchParams.set('status_id', '4');                                    // 4 = paid
-  url.searchParams.set('updated_at', String(Math.floor(since.getTime() / 1000)));
-  url.searchParams.set('per_page', '100');
+  const all: InvoiceNinjaInvoice[] = [];
+  for (let page = 1; page <= MAX_PAGES; page++) {
+    const url = new URL(`${base}/api/v1/invoices`);
+    url.searchParams.set('status_id', String(statusId));
+    url.searchParams.set('updated_at', String(Math.floor(since.getTime() / 1000)));
+    url.searchParams.set('per_page', String(PAGE_SIZE));
+    url.searchParams.set('page', String(page));
 
-  const response = await fetch(url.toString(), {
-    headers: {
-      'X-Api-Token': config.invoiceNinjaApiToken!,
-      'X-Requested-With': 'XMLHttpRequest',
-    },
-  });
+    const response = await fetch(url.toString(), {
+      headers: { 'X-Api-Token': config.invoiceNinjaApiToken!, 'X-Requested-With': 'XMLHttpRequest' },
+    });
+    if (!response.ok) throw new Error(`Invoice Ninja API responded with ${response.status}`);
 
-  if (!response.ok) {
-    throw new Error(`Invoice Ninja API responded with ${response.status}`);
+    const json = (await response.json()) as { data?: InvoiceNinjaInvoice[] };
+    const batch = json.data ?? [];
+    all.push(...batch);
+    if (batch.length < PAGE_SIZE) break;
   }
-
-  const json = await response.json() as { data?: InvoiceNinjaInvoice[] };
-  return json.data ?? [];
+  return all;
 }
 
-// ── Process a single invoice ───────────────────────────────────────
+// ── Process invoices ───────────────────────────────────────────────
 
-async function processInvoice(invoice: InvoiceNinjaInvoice, log: { error: (obj: object, msg: string) => void }): Promise<void> {
-  // Skip if already recorded
-  const exists = await prisma.paymentsLedger.findUnique({ where: { invoiceId: invoice.id } });
-  if (exists) return;
+async function classifyInvoice(invoice: InvoiceNinjaInvoice) {
+  // Use the first line item that classifies; unit may come from any line item.
+  const items = invoice.line_items?.length ? invoice.line_items : [{ product_key: '', notes: '' }];
+  let feeType: FeeType | null = null;
+  let chosen = items[0];
+  for (const li of items) {
+    const t = classifyFeeText(li.product_key ?? '', li.notes ?? '');
+    if (t) { feeType = t; chosen = li; break; }
+  }
+  if (!feeType) {
+    feeType = (await classifyWithDeepSeek(chosen.product_key ?? '', chosen.notes ?? ''))
+           ?? (await classifyWithClaude(chosen.product_key ?? '', chosen.notes ?? ''));
+  }
+  let unit: string | null = null;
+  for (const li of [chosen, ...items]) {
+    unit = extractUnit(li.notes ?? '') ?? extractUnit(li.product_key ?? '');
+    if (unit) break;
+  }
+  return { feeType: feeType ?? 'unknown', unit, lineDate: chosen.date };
+}
 
-  const lineItem = invoice.line_items?.[0];
-  const productKey = lineItem?.product_key ?? '';
-  const notes      = lineItem?.notes ?? '';
+async function processPaidInvoice(invoice: InvoiceNinjaInvoice, log: Logger): Promise<void> {
+  if (await prisma.paymentsLedger.findUnique({ where: { invoiceId: invoice.id } })) return;
 
   const paidAt = invoice.paid_date ? new Date(invoice.paid_date) : new Date();
-
-  const lineItemDate = lineItem?.date ?? invoice.date;
-  const billingPeriod = lineItemDate
-    ? dayjs(lineItemDate).format('YYYY-MM')
-    : dayjs(paidAt).format('YYYY-MM');
-
-  const unit = extractUnit(notes) ?? extractUnit(productKey);
-
-  let feeType: string = classifyFeeType(productKey, notes) ?? 'unknown';
-  if (feeType === 'unknown') {
-    feeType = (await classifyWithDeepSeek(productKey, notes))
-           ?? (await classifyWithClaude(productKey, notes))
-           ?? 'unknown';
-  }
+  const { feeType, unit, lineDate } = await classifyInvoice(invoice);
+  const invoiceDate = lineDate ?? invoice.date;
+  const billingPeriod = dayjs(invoiceDate ?? paidAt).format('YYYY-MM');
 
   const paidToDate = Number(invoice.paid_to_date);
   const invoiceAmount = Number(invoice.amount);
   const amountPaid = paidToDate > 0 ? paidToDate : Number.isFinite(invoiceAmount) ? invoiceAmount : null;
 
-  await prisma.paymentsLedger.create({
+  const payment = await prisma.paymentsLedger.create({
     data: {
       clientId: invoice.client_id,
       invoiceId: invoice.id,
@@ -184,79 +143,82 @@ async function processInvoice(invoice: InvoiceNinjaInvoice, log: { error: (obj: 
       feeType,
       unit,
       paidAt,
+      invoiceDate: invoiceDate ? new Date(invoiceDate) : null,
       amountPaid,
     },
   });
 
-  if (feeType !== 'unknown' && unit) {
-    const moveTypeFilter = feeTypeToMoveType(feeType);
+  if (feeType === 'unknown' || !unit) return; // needs a human; shows in the review queue
 
-    // Also try the unit suffix after the last dash (e.g. "T4-1105" → "1105")
-    const unitVariants = [unit];
-    if (unit.includes('-')) unitVariants.push(unit.split('-').pop()!);
+  const result = await autoMatchPayment(payment).catch((err) => {
+    log.error({ err, invoiceId: invoice.id }, 'Auto-match failed');
+    return null;
+  });
+  if (result?.ok && result.transitioned) {
+    await sendPaymentConfirmation(prisma, result.booking).catch((err) => {
+      log.error({ err, bookingId: result.booking.id }, 'Failed to send payment confirmation');
+    });
+  }
+}
 
-    const matchingBooking = moveTypeFilter ? await prisma.booking.findFirst({
-      where: {
-        unit: { in: unitVariants },
-        moveType: moveTypeFilter,
-        status: { in: [BookingStatus.SUBMITTED, BookingStatus.PENDING] },
-      },
-    }) : null;
-
-    if (matchingBooking) {
-      const approvalResult = await checkAndApproveMoveRequest({
-        unit,
-        feeType,
-        billingPeriod,
-        bookingId: matchingBooking.id,
-      }).catch((err) => {
-        log.error({ err, invoiceId: invoice.id, bookingId: matchingBooking.id }, 'Invoice approval check failed');
-        return { approved: false as const };
-      });
-
-      if (approvalResult.approved) {
-        await sendPaymentConfirmationToDcook(prisma, matchingBooking).catch((err) => {
-          log.error({ err, bookingId: matchingBooking.id }, 'Failed to send payment confirmation to dcook');
-        });
-      }
-    }
+async function processReversedInvoice(invoice: InvoiceNinjaInvoice, log: Logger): Promise<void> {
+  const payment = await prisma.paymentsLedger.findUnique({ where: { invoiceId: invoice.id } });
+  if (!payment || payment.reversedAt) return;
+  const booking = await markPaymentReversed(payment);
+  if (booking) {
+    await sendPaymentReversedNotice(prisma, booking, invoice.id).catch((err) => {
+      log.error({ err, bookingId: booking.id }, 'Failed to send payment reversal notice');
+    });
   }
 }
 
 // ── Poller ─────────────────────────────────────────────────────────
 
-export async function runInvoiceNinjaPoll(log: { info: (msg: string) => void; error: (obj: object, msg: string) => void }): Promise<void> {
+let running = false;
+
+export async function runInvoiceNinjaPoll(log: Logger): Promise<void> {
+  if (running) return;
   const settings = await prisma.appSetting.findFirst();
   if (!settings?.invoiceNinjaEnabled) return;
 
-  const since = lastPollAt ?? dayjs().subtract(STARTUP_LOOKBACK_HOURS, 'hour').toDate();
-  lastPollAt = new Date();
-
-  log.info('Invoice Ninja poll started');
-
-  let invoices: InvoiceNinjaInvoice[];
+  running = true;
   try {
-    invoices = await fetchPaidInvoices(since);
-  } catch (err) {
-    log.error({ err }, 'Failed to fetch invoices from Invoice Ninja');
-    return;
-  }
+    const startedAt = new Date();
+    const since = settings.invoiceNinjaCursor
+      ? new Date(settings.invoiceNinjaCursor.getTime() - CURSOR_OVERLAP_MS)
+      : dayjs().subtract(INITIAL_LOOKBACK_HOURS, 'hour').toDate();
 
-  for (const invoice of invoices) {
-    await processInvoice(invoice, log).catch((err) => {
-      log.error({ err, invoiceId: invoice.id }, 'Failed to process Invoice Ninja invoice');
-    });
+    log.info('Invoice Ninja poll started');
+
+    let paid: InvoiceNinjaInvoice[];
+    let reversed: InvoiceNinjaInvoice[];
+    try {
+      paid = await fetchInvoices(STATUS_PAID, since);
+      reversed = [...(await fetchInvoices(STATUS_CANCELLED, since)), ...(await fetchInvoices(STATUS_REVERSED, since))];
+    } catch (err) {
+      // Cursor is not advanced, so the same window is retried on the next poll.
+      log.error({ err }, 'Failed to fetch invoices from Invoice Ninja');
+      return;
+    }
+
+    for (const invoice of paid) {
+      await processPaidInvoice(invoice, log).catch((err) => log.error({ err, invoiceId: invoice.id }, 'Failed to process Invoice Ninja invoice'));
+    }
+    for (const invoice of reversed) {
+      await processReversedInvoice(invoice, log).catch((err) => log.error({ err, invoiceId: invoice.id }, 'Failed to process reversed invoice'));
+    }
+
+    await prisma.appSetting.update({ where: { id: settings.id }, data: { invoiceNinjaCursor: startedAt } });
+  } finally {
+    running = false;
   }
 }
 
-export function startInvoiceNinjaPoller(log: { info: (msg: string) => void; error: (obj: object, msg: string) => void }): void {
+export function startInvoiceNinjaPoller(log: Logger): void {
   if (!config.invoiceNinjaUrl || !config.invoiceNinjaApiToken) {
     log.info('Invoice Ninja poller disabled — INVOICE_NINJA_URL or INVOICE_NINJA_API_TOKEN not set');
     return;
   }
-
-  // Initial run shortly after startup
   setTimeout(() => runInvoiceNinjaPoll(log).catch(() => {}), 15_000);
-  // Recurring poll
   setInterval(() => runInvoiceNinjaPoll(log).catch(() => {}), POLL_INTERVAL_MS);
 }

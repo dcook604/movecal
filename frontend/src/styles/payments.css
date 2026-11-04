@@ -547,3 +547,17 @@
 .btn-restore:hover {
   background: #f0fdf4;
 }
+
+/* ── Review cards ───────────────────────────────────────── */
+.review-count { display: inline-block; background: #fef3c7; color: #92400e; border-radius: 999px; padding: 0 10px; font-size: 0.9rem; margin-left: 6px; }
+.payments-hint { color: #64748b; font-size: 0.875rem; margin: -4px 0 14px; }
+.review-card { background: #fff; border: 1px solid #e2e8f0; border-left: 4px solid #f59e0b; border-radius: 10px; padding: 16px 18px; margin-bottom: 14px; }
+.review-head { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; align-items: flex-start; }
+.review-title { font-weight: 700; font-size: 1.05rem; }
+.review-sub { color: #64748b; font-size: 0.82rem; margin-top: 2px; }
+.review-fee { display: flex; align-items: center; gap: 8px; }
+.review-warn { color: #92400e; background: #fffbeb; border-radius: 6px; padding: 6px 10px; font-size: 0.85rem; margin: 10px 0 0; }
+.suggestions { margin-top: 12px; }
+.suggestions-label { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.04em; color: #64748b; margin-bottom: 6px; }
+.suggestion { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 10px 12px; border: 1px solid #e2e8f0; border-radius: 8px; margin-bottom: 6px; flex-wrap: wrap; }
+.suggestion--best { border-color: #22c55e; background: #f0fdf4; }
