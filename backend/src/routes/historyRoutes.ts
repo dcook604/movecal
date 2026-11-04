@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { prisma } from '../prisma.js';
 import { requireRole } from '../middleware/auth.js';
 import { logAudit } from '../services/auditService.js';
+import { gatherReport, renderReport } from '../services/reportService.js';
 import {
   IdentityRow,
   IgnoredContacts,
@@ -259,5 +260,39 @@ export async function historyRoutes(app: FastifyInstance) {
     await prisma.sharedContact.delete({ where: { id } });
     await logAudit(prisma, req.user.id, 'SHARED_CONTACT_REMOVED');
     return { ok: true };
+  });
+
+  // Activity report for owners' meetings: bookings, payments and (optionally) the full activity log, as a PDF.
+  app.get('/api/admin/reports/activity.pdf', { preHandler: [requireRole(MANAGER_ROLES)], config: { rateLimit: { max: 10, timeWindow: '1 minute' } } }, async (req, reply) => {
+    const q = z.object({
+      from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+      to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+      includeLog: z.enum(['true', 'false']).default('true'),
+    }).parse(req.query);
+    const from = new Date(`${q.from}T00:00:00.000Z`);
+    const to = new Date(`${q.to}T00:00:00.000Z`);
+    if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime()) || to < from) {
+      return reply.status(400).send({ message: 'Choose a valid date range (end on or after start).' });
+    }
+    if (to.getTime() - from.getTime() > 400 * 86_400_000) {
+      return reply.status(400).send({ message: 'Report periods are limited to 13 months.' });
+    }
+
+    const user = await prisma.user.findUnique({ where: { id: req.user.id }, select: { name: true } });
+    const data = await gatherReport({ from, to, includeLog: q.includeLog === 'true', generatedBy: user?.name ?? 'Staff' });
+    await logAudit(prisma, req.user.id, 'REPORT_GENERATED', undefined, { from: q.from, to: q.to, includeLog: q.includeLog === 'true', bookings: data.bookings.length, payments: data.payments.length });
+
+    const doc = renderReport(data);
+    const chunks: Buffer[] = [];
+    doc.on('data', (c: Buffer) => chunks.push(c));
+    const done = new Promise<void>((resolve) => doc.on('end', () => resolve()));
+    doc.end();
+    await done;
+
+    return reply
+      .header('Content-Type', 'application/pdf')
+      .header('Content-Disposition', `attachment; filename="movecal-activity-${q.from}_to_${q.to}.pdf"`)
+      .header('Cache-Control', 'no-store')
+      .send(Buffer.concat(chunks));
   });
 }

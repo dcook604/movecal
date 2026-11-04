@@ -4,6 +4,7 @@ import dayjs from 'dayjs';
 import { api } from '../api';
 import { errorMessage } from '../auth/session';
 import { useAdmin } from './admin/AdminLayout';
+import { useUi } from '../components/ui';
 import '../styles/payments.css';
 
 const FEE_TYPES: Record<string, string> = {
@@ -43,6 +44,8 @@ function FeeTypeBadge({ feeType }: { feeType: string }) {
 
 export function PaymentsLedgerPage() {
   const { canManage, handleAuthError } = useAdmin();
+  const { toast, confirm } = useUi();
+  const [reviewFilter, setReviewFilter] = useState<'all' | 'suggested' | 'none' | 'unknown'>('all');
 
   const [selectedMonth, setSelectedMonth] = useState(() => dayjs().format('YYYY-MM'));
   const [unmatched, setUnmatched] = useState<Payment[]>([]);
@@ -50,7 +53,6 @@ export function PaymentsLedgerPage() {
   const [dismissed, setDismissed] = useState<Payment[]>([]);
   const [reversed, setReversed] = useState<Payment[]>([]);
   const [loadError, setLoadError] = useState('');
-  const [actionMessage, setActionMessage] = useState<{ text: string; ok: boolean } | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
 
   const [dismissingId, setDismissingId] = useState<string | null>(null);
@@ -64,7 +66,7 @@ export function PaymentsLedgerPage() {
   const [searchResults, setSearchResults] = useState<BookingOption[]>([]);
   const [searching, setSearching] = useState(false);
 
-  const say = (text: string, ok = true) => setActionMessage({ text, ok });
+  const say = (text: string, ok = true) => toast(text, ok ? 'success' : 'error');
 
   const refresh = async (month = selectedMonth) => {
     setLoadError('');
@@ -84,7 +86,6 @@ export function PaymentsLedgerPage() {
 
   const run = async (key: string, fn: () => Promise<void>, fallback: string) => {
     setBusy(key);
-    setActionMessage(null);
     try { await fn(); await refresh(); }
     catch (error) { if (!handleAuthError(error)) say(errorMessage(error, fallback), false); }
     finally { setBusy(null); }
@@ -101,8 +102,12 @@ export function PaymentsLedgerPage() {
     say(data.approved ? 'Payment matched and booking approved.' : 'Payment linked to the already-approved booking.');
   }, 'Failed to match payment.');
 
-  const unmatch = (p: Payment) => {
-    if (!confirm(`Unmatch invoice ${p.invoiceId} from its booking?\n\nIf the payment approved the booking, it goes back to pending.`)) return;
+  const unmatch = async (p: Payment) => {
+    const ok = await confirm({
+      title: 'Unmatch this payment?', tone: 'danger', confirmLabel: 'Unmatch',
+      message: `Invoice ${p.invoiceId} will be detached from its booking. If the payment approved the booking, it goes back to pending.`,
+    });
+    if (!ok) return;
     return run(p.id, async () => { await api.post(`/api/admin/payments-ledger/${p.id}/unmatch`); say('Payment unmatched.'); }, 'Failed to unmatch.');
   };
 
@@ -139,6 +144,11 @@ export function PaymentsLedgerPage() {
     return <div className="payments-page"><h1>Payments</h1><p className="payments-error">You do not have permission to view this page.</p></div>;
   }
 
+  const hasSuggestion = (p: Payment) => (p.suggestions?.length ?? 0) > 0;
+  const reviewList = unmatched
+    .filter((p) => reviewFilter === 'all' || (reviewFilter === 'suggested' && hasSuggestion(p)) || (reviewFilter === 'none' && !hasSuggestion(p)) || (reviewFilter === 'unknown' && (p.feeType === 'unknown' || !p.unit)))
+    .sort((a, b) => (b.suggestions?.[0]?.score ?? -1) - (a.suggestions?.[0]?.score ?? -1));
+
   const shiftMonth = (delta: number) => setSelectedMonth(dayjs(`${selectedMonth}-01`).add(delta, 'month').format('YYYY-MM'));
 
   return (
@@ -147,7 +157,6 @@ export function PaymentsLedgerPage() {
       <div className="page-actions">
         <button onClick={() => refresh()}>Refresh</button>
         <button onClick={rerunMatching} disabled={busy === 'retry'}>{busy === 'retry' ? 'Matching…' : 'Re-run matching'}</button>
-        {actionMessage && <span style={{ color: actionMessage.ok ? '#166534' : '#dc2626' }}>{actionMessage.text}</span>}
       </div>
       {loadError && <p className="payments-error">{loadError}</p>}
 
@@ -157,8 +166,16 @@ export function PaymentsLedgerPage() {
         Paid invoices that could not be matched automatically. Matching only runs unattended when exactly one unpaid booking
         fits the unit, fee type and date; anything ambiguous lands here with suggestions.
       </p>
+      {unmatched.length > 0 && (
+        <div className="queue-tabs" role="group" aria-label="Filter payments" style={{ marginBottom: 12 }}>
+          {([['all', 'All'], ['suggested', 'Has suggestion'], ['none', 'No suggestion'], ['unknown', 'Missing unit / fee type']] as const).map(([k, l]) => (
+            <button key={k} className={`queue-tab${reviewFilter === k ? ' queue-tab--active' : ''}`} aria-pressed={reviewFilter === k} onClick={() => setReviewFilter(k)}>{l}</button>
+          ))}
+        </div>
+      )}
       {unmatched.length === 0 && <p className="payments-empty">Nothing to review — every paid invoice is matched.</p>}
-      {unmatched.map((p) => (
+      {unmatched.length > 0 && reviewList.length === 0 && <p className="payments-empty">No payments match this filter.</p>}
+      {reviewList.map((p) => (
         <div key={p.id} className="review-card">
           <div className="review-head">
             <div>
@@ -264,17 +281,17 @@ export function PaymentsLedgerPage() {
       <p className="payments-hint">Shows invoices raised in this month and invoices for moves happening in it.</p>
       {matched.length === 0 ? <p className="payments-empty">No matched payments for this month.</p> : (
         <div className="table-scroll">
-          <table className="payments-table">
+          <table className="payments-table payments-table--stack">
             <thead><tr><th>Invoice</th><th>Unit</th><th>Fee</th><th>Amount</th><th>Paid</th><th>Booking</th><th /></tr></thead>
             <tbody>
               {matched.map((p) => (
                 <tr key={p.id}>
-                  <td>{p.invoiceId}</td>
-                  <td>{p.unit ?? '—'}</td>
-                  <td><FeeTypeBadge feeType={p.feeType} /></td>
-                  <td>{money(p.amountPaid)}</td>
-                  <td>{fmtDay(p.paidAt)}</td>
-                  <td>
+                  <td data-label="Invoice">{p.invoiceId}</td>
+                  <td data-label="Unit">{p.unit ?? '—'}</td>
+                  <td data-label="Fee"><FeeTypeBadge feeType={p.feeType} /></td>
+                  <td data-label="Amount">{money(p.amountPaid)}</td>
+                  <td data-label="Paid">{fmtDay(p.paidAt)}</td>
+                  <td data-label="Booking">
                     {p.booking
                       ? <Link to={`/admin/bookings/${p.booking.id}`}>{p.booking.residentName} · {fmtMoveDate(p.booking.moveDate)}</Link>
                       : '—'}
@@ -293,11 +310,11 @@ export function PaymentsLedgerPage() {
           <h2>Reversed in Invoice Ninja</h2>
           <p className="payments-hint">These invoices were cancelled or reversed after being paid. Any booking they were matched to is flagged “Payment reversed” in the queue.</p>
           <div className="table-scroll">
-            <table className="payments-table">
+            <table className="payments-table payments-table--stack">
               <thead><tr><th>Invoice</th><th>Unit</th><th>Amount</th><th>Reversed</th></tr></thead>
               <tbody>
                 {reversed.map((p) => (
-                  <tr key={p.id}><td>{p.invoiceId}</td><td>{p.unit ?? '—'}</td><td>{money(p.amountPaid)}</td><td>{p.reversedAt ? fmtDay(p.reversedAt) : '—'}</td></tr>
+                  <tr key={p.id}><td data-label="Invoice">{p.invoiceId}</td><td data-label="Unit">{p.unit ?? '—'}</td><td data-label="Amount">{money(p.amountPaid)}</td><td data-label="Reversed">{p.reversedAt ? fmtDay(p.reversedAt) : '—'}</td></tr>
                 ))}
               </tbody>
             </table>
@@ -313,7 +330,7 @@ export function PaymentsLedgerPage() {
           </button>
           {showDismissed && (
             <div className="table-scroll">
-              <table className="payments-table">
+              <table className="payments-table payments-table--stack">
                 <thead><tr><th>Invoice</th><th>Unit</th><th>Amount</th><th>Reason</th><th /></tr></thead>
                 <tbody>
                   {dismissed.map((p) => (

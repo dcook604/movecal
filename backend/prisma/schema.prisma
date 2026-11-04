@@ -165,6 +165,7 @@ model AppSetting {
   invoiceNinjaEnabled                         Boolean  @default(false) @map("invoice_ninja_enabled")
   unpaidPaymentReminderEnabled                Boolean  @default(false) @map("unpaid_payment_reminder_enabled")
   paymentNotifyEmail                          String?  @map("payment_notify_email")
+  paymentInstructions                         String?  @map("payment_instructions")
   invoiceNinjaCursor                          DateTime? @map("invoice_ninja_cursor")
   createdAt                                   DateTime @default(now()) @map("created_at")
   updatedAt                                   DateTime @updatedAt @map("updated_at")

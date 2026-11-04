@@ -6,6 +6,7 @@ import {
   clearSession, decodeEmailFromToken, errorMessage, getStoredRole, getStoredToken,
   isUnauthorized, ROLE_LABELS, saveSession, UserRole,
 } from '../../auth/session';
+import { UiProvider } from '../../components/ui';
 import '../../styles/admin.css';
 
 export interface AdminContext {
@@ -80,6 +81,7 @@ export function AdminLayout() {
   const ctx: AdminContext = { role, email, canManage, handleAuthError, adoptToken };
 
   return (
+    <UiProvider>
     <div className="admin-page">
       {mustChange && (
         <div className="modal-backdrop">
@@ -110,7 +112,7 @@ export function AdminLayout() {
       )}
 
       <div className="admin-subnav">
-        <nav>
+        <nav aria-label="Admin sections">
           <NavLink to="/admin" end>Queue</NavLink>
           {canManage && <NavLink to="/admin/payments">Payments</NavLink>}
           <NavLink to="/admin/history">History</NavLink>
@@ -124,5 +126,6 @@ export function AdminLayout() {
 
       <Outlet context={ctx} />
     </div>
+    </UiProvider>
   );
 }

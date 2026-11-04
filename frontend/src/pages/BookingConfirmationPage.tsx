@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { api } from '../api';
 import { parseBookingTime } from '../utils/bookingTime';
+import { BookingProgress, PaymentGuide } from '../components/ResidentPayment';
 import '../styles/resident.css';
 
 type Booking = {
@@ -19,6 +20,9 @@ type Booking = {
   loadingBayRequired: boolean;
   notes: string | null;
   status: string;
+  paymentStatus?: string;
+  requiresPayment?: boolean;
+  statusReason?: string | null;
 };
 
 const MOVE_TYPE_LABELS: Record<string, string> = {
@@ -93,9 +97,12 @@ export function BookingConfirmationPage() {
           }}>✓</div>
           <h2 className="resident-form-title" style={{ margin: '0 0 4px' }}>Booking Submitted!</h2>
           <p style={{ color: '#16a34a', fontWeight: 600, margin: 0, fontSize: '0.9375rem' }}>
-            Your booking request has been received and is pending review.
+            Your booking request has been received.
           </p>
         </div>
+
+        <BookingProgress status={booking.status} paymentStatus={booking.paymentStatus} requiresPayment={booking.requiresPayment} statusReason={booking.statusReason} />
+        {booking.requiresPayment && booking.paymentStatus !== 'PAID' && booking.status !== 'APPROVED' && <PaymentGuide unit={booking.unit} heading="Next step: pay the move fee" />}
 
         <fieldset className="form-group">
           <legend className="form-group-legend">Booking Summary</legend>

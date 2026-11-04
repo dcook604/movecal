@@ -1,9 +1,12 @@
 import { FormEvent, useCallback, useEffect, useRef, useState } from 'react';
 import axios from 'axios';
+import dayjs from 'dayjs';
+import quarterOfYear from 'dayjs/plugin/quarterOfYear';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { api } from '../api';
 import { parseBookingTime } from '../utils/bookingTime';
 import { useAdmin } from './admin/AdminLayout';
+import { useUi } from '../components/ui';
 import '../styles/history.css';
 
 type Strength = 'strong' | 'weak';
@@ -31,6 +34,8 @@ const fmtDate = (iso: string) => iso.slice(0, 10);
 const fmtTime = (r: { startDatetime: string; endDatetime: string }) =>
   `${parseBookingTime(r.startDatetime).format('h:mm A')} – ${parseBookingTime(r.endDatetime).format('h:mm A')}`;
 
+dayjs.extend(quarterOfYear);
+
 function errMsg(e: unknown) {
   return axios.isAxiosError(e) ? e.response?.data?.message ?? e.message : 'Something went wrong';
 }
@@ -38,6 +43,39 @@ function errMsg(e: unknown) {
 export function HistoryPage() {
   const { canManage } = useAdmin();
   const navigate = useNavigate();
+  const { toast } = useUi();
+
+  // ── PDF activity report (owners' meetings) ──
+  const monthStart = dayjs().startOf('month');
+  const [showReport, setShowReport] = useState(false);
+  const [repFrom, setRepFrom] = useState(monthStart.subtract(1, 'month').format('YYYY-MM-DD'));
+  const [repTo, setRepTo] = useState(monthStart.subtract(1, 'day').format('YYYY-MM-DD'));
+  const [repLog, setRepLog] = useState(true);
+  const [repBusy, setRepBusy] = useState(false);
+
+  const presets: [string, string, string][] = [
+    ['Last month', monthStart.subtract(1, 'month').format('YYYY-MM-DD'), monthStart.subtract(1, 'day').format('YYYY-MM-DD')],
+    ['This month', monthStart.format('YYYY-MM-DD'), dayjs().endOf('month').format('YYYY-MM-DD')],
+    ['Last quarter', dayjs().startOf('quarter' as any).subtract(3, 'month').format('YYYY-MM-DD'), dayjs().startOf('quarter' as any).subtract(1, 'day').format('YYYY-MM-DD')],
+    ['Year to date', dayjs().startOf('year').format('YYYY-MM-DD'), dayjs().format('YYYY-MM-DD')],
+  ];
+
+  const downloadReport = async () => {
+    setRepBusy(true);
+    try {
+      const res = await api.get('/api/admin/reports/activity.pdf', { params: { from: repFrom, to: repTo, includeLog: repLog }, responseType: 'blob' });
+      const url = URL.createObjectURL(res.data);
+      const a = document.createElement('a');
+      a.href = url; a.download = `movecal-activity-${repFrom}_to_${repTo}.pdf`; a.click();
+      URL.revokeObjectURL(url);
+      toast('Report downloaded.');
+    } catch (e: any) {
+      // Blob error bodies need parsing to surface the server's message.
+      let msg = 'Could not generate the report.';
+      try { msg = JSON.parse(await e.response.data.text()).message ?? msg; } catch { /* keep default */ }
+      toast(msg, 'error');
+    } finally { setRepBusy(false); }
+  };
   const [searchParams] = useSearchParams();
 
   const [q, setQ] = useState('');
@@ -124,6 +162,34 @@ export function HistoryPage() {
   return (
     <div className="history-page">
       <h1>Move History</h1>
+      {canManage && (
+        <section className="report-panel" aria-label="Activity report">
+          <button type="button" className="report-toggle" aria-expanded={showReport} onClick={() => setShowReport((v) => !v)}>
+            {showReport ? '▾' : '▸'} Generate PDF activity report
+          </button>
+          {showReport && (
+            <div className="report-body">
+              <p className="history-hint" style={{ marginTop: 0 }}>
+                A summary of booking requests, approvals and payments for the period, with exceptions highlighted and an optional
+                timestamped activity log. Resident email and phone are not included. Suitable for presenting to owners.
+              </p>
+              <div className="report-presets">
+                {presets.map(([l, f, t]) => (
+                  <button key={l} type="button" className={`queue-tab${repFrom === f && repTo === t ? ' queue-tab--active' : ''}`} onClick={() => { setRepFrom(f); setRepTo(t); }}>{l}</button>
+                ))}
+              </div>
+              <div className="history-filters">
+                <label>From <input type="date" value={repFrom} max={repTo} onChange={(e) => setRepFrom(e.target.value)} /></label>
+                <label>To <input type="date" value={repTo} min={repFrom} onChange={(e) => setRepTo(e.target.value)} /></label>
+                <label><input type="checkbox" checked={repLog} onChange={(e) => setRepLog(e.target.checked)} /> Include full activity log</label>
+                <button type="button" className="btn-sm btn-blue" disabled={repBusy || !repFrom || !repTo || repTo < repFrom} onClick={downloadReport}>
+                  {repBusy ? 'Generating…' : 'Download PDF'}
+                </button>
+              </div>
+            </div>
+          )}
+        </section>
+      )}
       <form className="history-search" onSubmit={onSubmit}>
         <input
           type="search" autoFocus value={q} onChange={(e) => setQ(e.target.value)}

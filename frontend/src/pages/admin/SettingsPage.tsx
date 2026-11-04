@@ -2,6 +2,7 @@ import { FormEvent, useEffect, useState } from 'react';
 import { api } from '../../api';
 import { ROLE_LABELS } from '../../auth/session';
 import { useAdmin } from './AdminLayout';
+import { useUi } from '../../components/ui';
 import '../../styles/admin.css';
 
 const emptyRecipient = { name: '', email: '', enabled: true, notifyOn: ['APPROVED', 'REJECTED', 'SUBMITTED'] };
@@ -11,17 +12,19 @@ export function SettingsPage() {
   const { canManage: canManageSettings, email, handleAuthError, adoptToken } = useAdmin();
   const [recipients, setRecipients] = useState<any[]>([]);
   const [recipientForm, setRecipientForm] = useState<any>(emptyRecipient);
-  const [settings, setSettings] = useState<any>({ smtpHost: null, smtpPort: null, smtpSecure: false, smtpUsername: null, fromName: null, fromEmail: null, includeResidentContactInApprovalEmails: false, reminderEnabled: true, invoiceNinjaEnabled: false, unpaidPaymentReminderEnabled: false, paymentNotifyEmail: null });
+  const [settings, setSettings] = useState<any>({ smtpHost: null, smtpPort: null, smtpSecure: false, smtpUsername: null, fromName: null, fromEmail: null, includeResidentContactInApprovalEmails: false, reminderEnabled: true, invoiceNinjaEnabled: false, unpaidPaymentReminderEnabled: false, paymentNotifyEmail: null, paymentInstructions: null });
   const [testEmailTo, setTestEmailTo] = useState(email);
-  const [actionMessage, setActionMessage] = useState('');
   const [loadError, setLoadError] = useState('');
   const [passwordForm, setPasswordForm] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' });
   const [emailForm, setEmailForm] = useState({ newEmail: '', password: '' });
-  const [accountMessage, setAccountMessage] = useState('');
   const [users, setUsers] = useState<any[]>([]);
   const [userForm, setUserForm] = useState(emptyUser);
   const [editingUserId, setEditingUserId] = useState<string | null>(null);
-  const [userMessage, setUserMessage] = useState('');
+
+  const { toast, confirm } = useUi();
+  // All success messages in this page contain "successfully"; anything else is an error.
+  const notify = (m: string) => { if (m) toast(m, /successfully/i.test(m) ? 'success' : 'error'); };
+  const setActionMessage = notify, setAccountMessage = notify, setUserMessage = notify;
 
   const refresh = async () => {
     if (!canManageSettings) return;
@@ -70,7 +73,7 @@ export function SettingsPage() {
   };
 
   const deleteRecipient = async (id: string, recipientEmail: string) => {
-    if (!confirm(`Delete recipient ${recipientEmail}?`)) return;
+    if (!(await confirm({ title: 'Delete recipient?', tone: 'danger', confirmLabel: 'Delete', message: `${recipientEmail} will stop receiving notifications.` }))) return;
     setActionMessage('');
     try {
       await api.delete(`/api/admin/recipients/${id}`);
@@ -177,7 +180,7 @@ export function SettingsPage() {
   };
 
   const deleteUser = async (userId: string, userEmail: string) => {
-    if (!confirm(`Delete user ${userEmail}?`)) return;
+    if (!(await confirm({ title: 'Delete user?', tone: 'danger', confirmLabel: 'Delete user', message: `${userEmail} will no longer be able to sign in. Their bookings and history are kept.` }))) return;
     setUserMessage('');
     try {
       await api.delete(`/api/admin/users/${userId}`);
@@ -205,12 +208,10 @@ export function SettingsPage() {
     <>
       <div className="admin-title-row"><h2>Settings</h2></div>
       {loadError && <p className="error-message">{loadError}</p>}
-      {actionMessage && <p className={actionMessage.includes('success') ? 'success-message' : 'error-message'}>{actionMessage}</p>}
 
       {/* ── Account Settings ── */}
       <div className="admin-section">
         <h3>Account Settings</h3>
-        {accountMessage && <p className={accountMessage.includes('success') ? 'success-message' : 'error-message'}>{accountMessage}</p>}
         <div className="account-grid">
           {/* Change Password */}
           <div className="account-card">
@@ -272,6 +273,13 @@ export function SettingsPage() {
                   <input id="payment-notify" type="email" placeholder="accounting@example.com" value={settings.paymentNotifyEmail ?? ''}
                     onChange={(e) => setSettings({ ...settings, paymentNotifyEmail: e.target.value || null })} />
                   <small>Receives an email when a payment approves a booking, and when a matched payment is reversed. Leave blank to disable.</small>
+                </div>
+                <div className="form-field">
+                  <label htmlFor="payment-instructions">Payment instructions for residents</label>
+                  <textarea id="payment-instructions" rows={5} maxLength={2000} value={settings.paymentInstructions ?? ''}
+                    placeholder={'Move-in / move-out fee: $___\nDelivery fee: $___\nPay at the concierge desk or via the invoice link sent by management.'}
+                    onChange={(e) => setSettings({ ...settings, paymentInstructions: e.target.value || null })} />
+                  <small>Shown on the booking form, the booking page and the "request received" email. Include fee amounts and how to pay.</small>
                 </div>
                 <button className="btn-sm btn-blue" type="submit">Save</button>
               </form>
@@ -344,7 +352,6 @@ export function SettingsPage() {
           <div className="admin-section">
             <h3>User Management</h3>
             <p className="admin-section-desc">Manage system users and their access levels.</p>
-            {userMessage && <p className={userMessage.includes('success') ? 'success-message' : 'error-message'}>{userMessage}</p>}
 
             {users.length === 0
               ? <p className="admin-section-desc" style={{ fontStyle: 'italic' }}>No users found.</p>

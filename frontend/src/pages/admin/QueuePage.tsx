@@ -3,13 +3,14 @@ import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../../api';
 import { errorMessage } from '../../auth/session';
 import { useAdmin } from './AdminLayout';
+import { Dialog, useUi } from '../../components/ui';
 import { parseBookingTime, selectedSlotRange } from '../../utils/bookingTime';
 import {
   filterAvailableSlots, getSlotsForDateAndType, minsToLabel, timeToMins,
 } from '../../utils/slots';
 import '../../styles/admin.css';
 
-type Tab = 'action' | 'today' | 'upcoming' | 'past' | 'closed';
+type Tab = 'action' | 'overdue' | 'today' | 'upcoming' | 'past' | 'closed';
 
 const MOVE_TYPE_LABELS: Record<string, string> = {
   MOVE_IN: 'Move In', MOVE_OUT: 'Move Out', DELIVERY: 'Delivery', RENO: 'Renovation',
@@ -82,32 +83,34 @@ function ReasonDialog({ title, confirmLabel, suggestions, onConfirm, onClose }: 
 }) {
   const [reason, setReason] = useState('');
   return (
-    <div className="modal-backdrop">
-      <div className="modal-card" style={{ maxWidth: 440 }}>
-        <h3 style={{ margin: '0 0 12px' }}>{title}</h3>
-        <p className="admin-section-desc" style={{ marginTop: 0 }}>The reason is recorded in the booking history and included in the resident's email.</p>
-        {suggestions && (
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
-            {suggestions.map((s) => <button key={s} type="button" className="queue-tab" onClick={() => setReason(s)}>{s}</button>)}
-          </div>
-        )}
-        <textarea rows={3} value={reason} maxLength={500} autoFocus onChange={(e) => setReason(e.target.value)} placeholder="Reason" style={{ width: '100%' }} />
-        <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
-          <button className="btn-sm btn-red" disabled={!reason.trim()} onClick={() => onConfirm(reason.trim())}>{confirmLabel}</button>
-          <button className="btn-sm btn-slate" onClick={onClose}>Back</button>
+    <Dialog title={title} onClose={onClose} maxWidth={440}>
+      <p className="admin-section-desc" style={{ marginTop: 0 }}>The reason is recorded in the booking history and included in the resident's email.</p>
+      {suggestions && (
+        <div className="reason-chips">
+          {suggestions.map((s) => <button key={s} type="button" className="queue-tab" onClick={() => setReason(s)}>{s}</button>)}
         </div>
+      )}
+      <label htmlFor="reason-text" className="sr-only">Reason</label>
+      <textarea id="reason-text" rows={3} value={reason} maxLength={500} onChange={(e) => setReason(e.target.value)} placeholder="Reason" className="reason-text" />
+      <div className="modal-actions">
+        <button className="btn-sm btn-red" disabled={!reason.trim()} onClick={() => onConfirm(reason.trim())}>{confirmLabel}</button>
+        <button className="btn-sm btn-slate" onClick={onClose}>Back</button>
       </div>
-    </div>
+    </Dialog>
   );
 }
+
+const isOpenB = (b: any) => b.status === 'SUBMITTED' || b.status === 'PENDING';
 
 export function QueuePage() {
   const { handleAuthError, canManage } = useAdmin();
   const navigate = useNavigate();
+  const { toast, confirm } = useUi();
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkReject, setBulkReject] = useState(false);
   const [bookings, setBookings] = useState<any[]>([]);
   const [stats, setStats] = useState<any>();
   const [loadError, setLoadError] = useState('');
-  const [actionMessage, setActionMessage] = useState('');
   const [isUpdating, setIsUpdating] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>('action');
   const [search, setSearch] = useState('');
@@ -158,39 +161,80 @@ export function QueuePage() {
   }, [editingBookingId, editForm.moveDate]);
 
   // ── Actions ──────────────────────────────────────────────────
-  const patchStatus = async (b: any, payload: Record<string, unknown>, success: string) => {
+  const patchStatus = async (b: any, payload: Record<string, unknown>, success: string): Promise<boolean> => {
     setIsUpdating(b.id);
-    setActionMessage('');
     try {
       await api.patch(`/api/admin/bookings/${b.id}`, payload);
-      setActionMessage(success);
+      toast(success);
       await refresh();
+      return true;
     } catch (error: any) {
-      if (handleAuthError(error)) return;
+      if (handleAuthError(error)) return false;
       if (error.response?.data?.code === 'PAYMENT_REQUIRED') {
-        if (confirm(`No payment is matched to ${b.residentName}'s booking (Unit ${b.unit}).\n\nApprove it WITHOUT payment? This is recorded in the booking history.`)) {
-          setIsUpdating(null);
-          return patchStatus(b, { ...payload, approveWithoutPayment: true }, success);
-        }
-        return;
+        setIsUpdating(null);
+        const ok = await confirm({
+          title: 'Approve without payment?',
+          tone: 'warning',
+          confirmLabel: 'Approve without payment',
+          message: (
+            <>
+              <p style={{ margin: 0 }}>No payment is matched to this booking. Approving it is recorded in the booking history.</p>
+              <dl>
+                <dt>Resident</dt><dd>{b.residentName}</dd>
+                <dt>Unit</dt><dd>{b.unit}</dd>
+                <dt>Type</dt><dd>{MOVE_TYPE_LABELS[b.moveType] ?? b.moveType}</dd>
+                <dt>Date</dt><dd>{fmtDate(b.startDatetime)}</dd>
+              </dl>
+            </>
+          ),
+        });
+        return ok ? patchStatus(b, { ...payload, approveWithoutPayment: true }, success) : false;
       }
-      setActionMessage(errorMessage(error, 'Action failed.'));
+      toast(errorMessage(error, 'Action failed.'), 'error');
+      return false;
     } finally { setIsUpdating(null); }
   };
 
   const approve = (b: any) => patchStatus(b, { status: 'APPROVED' }, `Booking approved for ${b.residentName}`);
 
-  const sendPaymentReminder = async (b: any) => {
-    if (!confirm(`Send a payment due reminder email to ${b.residentName}?`)) return;
+  const sendPaymentReminder = async (b: any, ask = true) => {
+    if (ask && !(await confirm({ title: 'Send payment reminder?', confirmLabel: 'Send reminder', message: `An email will be sent to ${b.residentName} (${b.residentEmail || 'no email on file'}).` }))) return false;
     setIsUpdating(b.id);
-    setActionMessage('');
     try {
       await api.post(`/api/admin/bookings/${b.id}/payment-due-reminder`);
-      setActionMessage('Payment reminder sent.');
+      if (ask) toast('Payment reminder sent.');
+      return true;
     } catch (error: any) {
-      if (handleAuthError(error)) return;
-      setActionMessage(errorMessage(error, 'Failed to send payment reminder.'));
+      if (handleAuthError(error)) return false;
+      toast(errorMessage(error, 'Failed to send payment reminder.'), 'error');
+      return false;
     } finally { setIsUpdating(null); }
+  };
+
+  // ── Bulk actions ─────────────────────────────────────────────
+  const toggleSelected = (id: string) => setSelected((prev) => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+
+  const bulkRemind = async () => {
+    const targets = bookings.filter((b) => selected.has(b.id) && b.paymentStatus === 'NONE');
+    if (!targets.length) return toast('None of the selected bookings are awaiting payment.', 'error');
+    if (!(await confirm({ title: `Send ${targets.length} payment reminder${targets.length === 1 ? '' : 's'}?`, confirmLabel: 'Send reminders' }))) return;
+    let ok = 0;
+    for (const b of targets) if (await sendPaymentReminder(b, false)) ok++;
+    toast(`Sent ${ok} of ${targets.length} reminders.`, ok === targets.length ? 'success' : 'error');
+    setSelected(new Set());
+  };
+
+  const bulkRejectConfirm = async (reason: string) => {
+    setBulkReject(false);
+    const targets = bookings.filter((b) => selected.has(b.id));
+    let ok = 0;
+    for (const b of targets) {
+      try { await api.patch(`/api/admin/bookings/${b.id}`, { status: 'REJECTED', reason }); ok++; }
+      catch (error) { if (handleAuthError(error)) return; }
+    }
+    toast(`Rejected ${ok} of ${targets.length} bookings.`, ok === targets.length ? 'success' : 'error');
+    setSelected(new Set());
+    await refresh();
   };
 
   const submitQuickEntry = async (e: FormEvent) => {
@@ -208,7 +252,7 @@ export function QueuePage() {
       setQuickSlots([]);
       setShowQuickEntry(false);
       await refresh();
-      setActionMessage('Booking created and approved successfully');
+      toast('Booking created and approved.');
     } catch (error: any) {
       if (handleAuthError(error)) return;
       setQuickError(error.response?.data?.message || 'Failed to create booking.');
@@ -298,7 +342,7 @@ export function QueuePage() {
       });
       closeEditBooking();
       await refresh();
-      setActionMessage('Booking updated successfully');
+      toast('Booking updated.');
     } catch (error: any) {
       if (handleAuthError(error)) return;
       setEditError(error.response?.data?.message || 'Failed to update booking.');
@@ -306,7 +350,6 @@ export function QueuePage() {
       setIsSavingEdit(false);
     }
   };
-
   // ── Derived lists ────────────────────────────────────────────
   const { groups, counts } = useMemo(() => {
     const today = new Date(); today.setHours(0, 0, 0, 0);
@@ -316,9 +359,10 @@ export function QueuePage() {
     const isClosed = (b: any) => b.status === 'REJECTED' || b.status === 'CANCELLED';
     const g: Record<Tab, any[]> = {
       action: bookings.filter((b) => when(b) >= today && (isOpen(b) || b.paymentStatus === 'REFUNDED')),
+      overdue: bookings.filter((b) => when(b) < today && isOpen(b)).sort((a, b) => when(a).valueOf() - when(b).valueOf()),
       today: bookings.filter((b) => !isClosed(b) && when(b) >= today && when(b) < tomorrow),
       upcoming: bookings.filter((b) => b.status === 'APPROVED' && when(b) >= tomorrow),
-      past: bookings.filter((b) => !isClosed(b) && when(b) < today).sort((a, b) => when(b).valueOf() - when(a).valueOf()),
+      past: bookings.filter((b) => !isClosed(b) && !isOpen(b) && when(b) < today).sort((a, b) => when(b).valueOf() - when(a).valueOf()),
       closed: bookings.filter(isClosed).sort((a, b) => when(b).valueOf() - when(a).valueOf()),
     };
     return { groups: g, counts: Object.fromEntries(Object.entries(g).map(([k, v]) => [k, v.length])) as Record<Tab, number> };
@@ -329,9 +373,9 @@ export function QueuePage() {
     ? bookings.filter((b) => [b.residentName, b.unit, b.residentEmail, b.companyName].some((v) => (v ?? '').toLowerCase().includes(q)))
     : groups[tab];
 
-  const TAB_LABELS: Record<Tab, string> = { action: 'Needs action', today: 'Today', upcoming: 'Upcoming', past: 'Past', closed: 'Rejected / cancelled' };
+  const TAB_LABELS: Record<Tab, string> = { action: 'Needs action', overdue: 'Overdue', today: 'Today', upcoming: 'Upcoming', past: 'Past', closed: 'Rejected / cancelled' };
   const EMPTY: Record<Tab, string> = {
-    action: 'Nothing needs action — all caught up.', today: 'No moves today.', upcoming: 'No approved upcoming bookings.',
+    action: 'Nothing needs action — all caught up.', overdue: 'No overdue bookings.', today: 'No moves today.', upcoming: 'No approved upcoming bookings.',
     past: 'No past bookings.', closed: 'No rejected or cancelled bookings.',
   };
 
@@ -346,6 +390,10 @@ export function QueuePage() {
     const busy = isUpdating === b.id;
     return (
       <div key={b.id} className={`booking-card booking-card--${b.status?.toLowerCase()}`}>
+        {open && (
+          <input type="checkbox" className="booking-select" aria-label={`Select booking for ${b.residentName}, unit ${b.unit}`}
+            checked={selected.has(b.id)} onChange={() => toggleSelected(b.id)} />
+        )}
         <div className="booking-card-body">
           <div className="booking-card-top">
             <span className={`move-type-chip move-type-chip--${b.moveType?.toLowerCase()}`}>{MOVE_TYPE_LABELS[b.moveType] ?? b.moveType}</span>
@@ -374,20 +422,27 @@ export function QueuePage() {
           {b.statusReason && <div className="booking-reason">Reason: {b.statusReason}</div>}
         </div>
         <div className="booking-actions">
-          {open && (
-            <button className={`btn-sm ${b.paymentStatus === 'PAID' ? 'btn-green' : 'btn-amber'}`} onClick={() => approve(b)} disabled={busy}>
-              {busy ? '…' : b.paymentStatus === 'PAID' ? 'Approve' : 'Approve without payment'}
-            </button>
+          {open && b.paymentStatus === 'PAID' && (
+            <button className="btn-sm btn-green" onClick={() => approve(b)} disabled={busy}>{busy ? '…' : 'Approve'}</button>
           )}
           {open && b.paymentStatus === 'NONE' && (
-            <button className="btn-sm btn-slate" onClick={() => sendPaymentReminder(b)} disabled={busy}>Send reminder</button>
+            <button className="btn-sm btn-blue" onClick={() => sendPaymentReminder(b)} disabled={busy}>Send reminder</button>
           )}
-          {(open || b.status === 'APPROVED') && (
+          {!open && b.status === 'APPROVED' && (
             <button className="btn-sm btn-blue" onClick={() => openEditBooking(b)} disabled={busy}>Edit</button>
           )}
-          {open && <button className="btn-sm btn-red" onClick={() => setReasonFor({ booking: b, status: 'REJECTED' })} disabled={busy}>Reject</button>}
-          {b.status === 'APPROVED' && <button className="btn-sm btn-red" onClick={() => setReasonFor({ booking: b, status: 'CANCELLED' })} disabled={busy}>Cancel</button>}
           <button className="btn-sm btn-slate" onClick={() => navigate(`/admin/bookings/${b.id}`)}>Details</button>
+          {(open || b.status === 'APPROVED') && (
+            <details className="more-menu">
+              <summary className="btn-sm btn-slate">More ▾</summary>
+              <div className="more-menu-list" onClick={(e) => e.currentTarget.closest('details')?.removeAttribute('open')}>
+                <button onClick={() => openEditBooking(b)} disabled={busy}>Edit booking</button>
+                {open && b.paymentStatus !== 'PAID' && <button onClick={() => approve(b)} disabled={busy}>Approve without payment</button>}
+                {open && <button className="danger" onClick={() => setReasonFor({ booking: b, status: 'REJECTED' })} disabled={busy}>Reject…</button>}
+                {b.status === 'APPROVED' && <button className="danger" onClick={() => setReasonFor({ booking: b, status: 'CANCELLED' })} disabled={busy}>Cancel booking…</button>}
+              </div>
+            </details>
+          )}
         </div>
       </div>
     );
@@ -395,6 +450,15 @@ export function QueuePage() {
 
   return (
     <>
+      {bulkReject && (
+        <ReasonDialog
+          title={`Reject ${selected.size} booking${selected.size === 1 ? '' : 's'}?`}
+          confirmLabel="Reject bookings"
+          suggestions={REJECT_REASONS}
+          onClose={() => setBulkReject(false)}
+          onConfirm={bulkRejectConfirm}
+        />
+      )}
       {reasonFor && (
         <ReasonDialog
           title={reasonFor.status === 'REJECTED' ? `Reject booking for ${reasonFor.booking.residentName}?` : `Cancel booking for ${reasonFor.booking.residentName}?`}
@@ -429,9 +493,7 @@ export function QueuePage() {
           return options.sort((a, b) => a.start.localeCompare(b.start));
         })();
         return (
-          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 1000, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '24px 16px', overflowY: 'auto' }}>
-            <div style={{ background: '#fff', borderRadius: '12px', padding: '28px 24px', width: '100%', maxWidth: '560px', boxShadow: '0 20px 40px rgba(0,0,0,0.3)', marginTop: '16px' }}>
-              <h3 style={{ margin: '0 0 20px', fontSize: '1.125rem' }}>Edit Booking</h3>
+          <Dialog title="Edit Booking" onClose={closeEditBooking}>
               <div className="quick-entry-form-grid">
                 <div className="form-field">
                   <label>Resident Name</label>
@@ -540,20 +602,23 @@ export function QueuePage() {
                   Cancel
                 </button>
               </div>
-            </div>
-          </div>
+          </Dialog>
         );
       })()}
 
       <div className="admin-title-row"><h2>Booking Queue</h2></div>
       {loadError && <p className="error-message">{loadError}</p>}
-      {actionMessage && <p className={/(success|approved|rejected|cancelled|sent)/i.test(actionMessage) ? 'success-message' : 'error-message'}>{actionMessage}</p>}
 
       {stats && (
         <div className="queue-tiles">
           <button className={`queue-tile${counts.action ? ' queue-tile--alert' : ''}`} onClick={() => { setSearch(''); setTab('action'); }}>
             <div className="queue-tile-value">{counts.action}</div><div className="queue-tile-label">Needs action</div>
           </button>
+          {counts.overdue > 0 && (
+            <button className="queue-tile queue-tile--alert" onClick={() => { setSearch(''); setTab('overdue'); }}>
+              <div className="queue-tile-value">{counts.overdue}</div><div className="queue-tile-label">Overdue (move date passed)</div>
+            </button>
+          )}
           <button className="queue-tile" onClick={() => { setSearch(''); setTab('action'); }}>
             <div className="queue-tile-value">{stats.awaitingPayment ?? 0}</div><div className="queue-tile-label">Awaiting payment</div>
           </button>
@@ -719,15 +784,32 @@ export function QueuePage() {
               </div>
             )}
         <div className="queue-toolbar">
-          <div className="queue-tabs">
+          <div className="queue-tabs" role="tablist" aria-label="Booking groups">
             {(Object.keys(TAB_LABELS) as Tab[]).map((t) => (
-              <button key={t} className={`queue-tab${!q && tab === t ? ' queue-tab--active' : ''}`} onClick={() => { setSearch(''); setTab(t); }}>
+              <button key={t} role="tab" aria-selected={!q && tab === t} className={`queue-tab${!q && tab === t ? ' queue-tab--active' : ''}`} onClick={() => { setSearch(''); setTab(t); setSelected(new Set()); }}>
                 {TAB_LABELS[t]}<span className="queue-tab-count">{counts[t]}</span>
               </button>
             ))}
           </div>
-          <input className="queue-search" type="search" placeholder="Search name, unit, email…" value={search} onChange={(e) => setSearch(e.target.value)} />
+          <input className="queue-search" type="search" aria-label="Search bookings" placeholder="Search name, unit, email…" value={search} onChange={(e) => setSearch(e.target.value)} />
         </div>
+
+        {selected.size > 0 && (
+          <div className="bulk-bar" role="region" aria-label="Bulk actions">
+            <strong>{selected.size} selected</strong>
+            <button className="btn-sm btn-slate" onClick={bulkRemind}>Send payment reminders</button>
+            <button className="btn-sm btn-red" onClick={() => setBulkReject(true)}>Reject…</button>
+            <button className="btn-sm btn-slate" onClick={() => setSelected(new Set())}>Clear</button>
+          </div>
+        )}
+        {visible.some(isOpenB) && (
+          <label className="bulk-select-all">
+            <input type="checkbox"
+              checked={visible.filter(isOpenB).every((b) => selected.has(b.id))}
+              onChange={(e) => setSelected(e.target.checked ? new Set(visible.filter(isOpenB).map((b) => b.id)) : new Set())} />
+            Select all open bookings in this list
+          </label>
+        )}
 
         <div className="bookings-list">
           {visible.length === 0

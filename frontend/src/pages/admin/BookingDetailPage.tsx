@@ -4,6 +4,7 @@ import { api } from '../../api';
 import { errorMessage } from '../../auth/session';
 import { parseBookingTime } from '../../utils/bookingTime';
 import { useAdmin } from './AdminLayout';
+import { useUi } from '../../components/ui';
 import '../../styles/admin.css';
 
 const label = (s: string) => s.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
@@ -57,9 +58,9 @@ export function BookingDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { canManage, handleAuthError } = useAdmin();
+  const { toast, confirm } = useUi();
   const [b, setB] = useState<any>(null);
   const [error, setError] = useState('');
-  const [message, setMessage] = useState('');
   const [reasonMode, setReasonMode] = useState<'REJECTED' | 'CANCELLED' | null>(null);
   const [reason, setReason] = useState('');
   const [busy, setBusy] = useState(false);
@@ -76,16 +77,21 @@ export function BookingDetailPage() {
 
   useEffect(() => { load(); }, [load]);
 
-  const act = async (fn: () => Promise<unknown>, success: string) => {
-    setBusy(true); setMessage('');
-    try { await fn(); setMessage(success); await load(); }
+  const act = async (fn: () => Promise<unknown>, success: string): Promise<void> => {
+    setBusy(true);
+    try { await fn(); toast(success); await load(); }
     catch (e: any) {
       if (handleAuthError(e)) return;
-      if (e.response?.data?.code === 'PAYMENT_REQUIRED' && confirm('No payment is matched to this booking.\n\nApprove it WITHOUT payment? This is recorded in the history.')) {
+      if (e.response?.data?.code === 'PAYMENT_REQUIRED') {
         setBusy(false);
-        return act(() => api.patch(`/api/admin/bookings/${id}`, { status: 'APPROVED', approveWithoutPayment: true }), success);
+        const ok = await confirm({
+          title: 'Approve without payment?', tone: 'warning', confirmLabel: 'Approve without payment',
+          message: `No payment is matched to ${b?.residentName ?? 'this'} booking (Unit ${b?.unit}). This is recorded in the history.`,
+        });
+        if (ok) await act(() => api.patch(`/api/admin/bookings/${id}`, { status: 'APPROVED', approveWithoutPayment: true }), success);
+        return;
       }
-      setMessage(errorMessage(e, 'Action failed.'));
+      toast(errorMessage(e, 'Action failed.'), 'error');
     } finally { setBusy(false); }
   };
 
@@ -96,7 +102,7 @@ export function BookingDetailPage() {
       const a = document.createElement('a');
       a.href = url; a.download = name; a.click();
       URL.revokeObjectURL(url);
-    } catch (e) { if (!handleAuthError(e)) setMessage('Could not download the document.'); }
+    } catch (e) { if (!handleAuthError(e)) toast('Could not download the document.', 'error'); }
   };
 
   if (error) return <><p className="error-message">{error}</p><Link to="/admin">← Back to queue</Link></>;
@@ -125,7 +131,6 @@ export function BookingDetailPage() {
         <h2>{label(b.moveType)} · Unit {b.unit}</h2>
         <button className="btn-sm btn-slate" onClick={() => navigate(-1)}>← Back</button>
       </div>
-      {message && <p className={/(fail|could not|no payment|cannot|required|only)/i.test(message) ? 'error-message' : 'success-message'}>{message}</p>}
 
       <div className="detail-grid">
         <div>
@@ -192,7 +197,7 @@ export function BookingDetailPage() {
               )}
               {open && b.paymentStatus === 'NONE' && (
                 <button className="btn-sm btn-slate" disabled={busy}
-                  onClick={() => confirm(`Send a payment reminder to ${b.residentName}?`) && act(() => api.post(`/api/admin/bookings/${id}/payment-due-reminder`), 'Payment reminder sent.')}>
+                  onClick={async () => (await confirm({ title: 'Send payment reminder?', confirmLabel: 'Send reminder', message: `An email will be sent to ${b.residentName}.` })) && act(() => api.post(`/api/admin/bookings/${id}/payment-due-reminder`), 'Payment reminder sent.')}>
                   Send payment reminder
                 </button>
               )}
@@ -200,7 +205,7 @@ export function BookingDetailPage() {
               {b.status === 'APPROVED' && <button className="btn-sm btn-red" disabled={busy} onClick={() => { setReasonMode('CANCELLED'); setReason(''); }}>Cancel booking…</button>}
               {canManage && closed && b.paymentStatus === 'NONE' && (
                 <button className="btn-sm btn-slate" disabled={busy}
-                  onClick={() => confirm('Permanently delete this booking? Its history entries will be detached.') && act(async () => { await api.delete(`/api/admin/bookings/${id}`); navigate('/admin'); }, 'Deleted.')}>
+                  onClick={async () => (await confirm({ title: 'Delete permanently?', tone: 'danger', confirmLabel: 'Delete booking', message: 'This cannot be undone. Its history entries will be detached from the booking.' })) && act(async () => { await api.delete(`/api/admin/bookings/${id}`); navigate('/admin'); }, 'Booking deleted.')}>
                   Delete permanently
                 </button>
               )}

@@ -214,3 +214,13 @@ input:focus, select:focus, button:focus, textarea:focus {
 @media (max-width: 480px) {
   .card { padding: 14px; }
 }
+
+/* ── Keyboard focus for links and custom controls ─────────────── */
+a:focus-visible, [role="tab"]:focus-visible, summary:focus-visible {
+  outline: 2px solid #0066cc;
+  outline-offset: 2px;
+}
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; animation: none !important; }
+}
+.site-nav-staff { margin-left: auto; }

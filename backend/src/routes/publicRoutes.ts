@@ -41,6 +41,12 @@ export async function publicRoutes(app: FastifyInstance) {
     }));
   });
 
+  // Fee / payment instructions configured by staff, shown on the resident pages.
+  app.get('/api/public/payment-info', async () => {
+    const settings = await prisma.appSetting.findFirst({ select: { paymentInstructions: true } });
+    return { instructions: settings?.paymentInstructions?.trim() || null };
+  });
+
   app.get('/api/public/bookings', async () => {
     const bookings = await prisma.booking.findMany({
       where: { status: BookingStatus.APPROVED },
@@ -77,6 +83,9 @@ export async function publicRoutes(app: FastifyInstance) {
       loadingBayRequired: b.loadingBayRequired,
       notes: b.notes,
       status: b.status,
+      statusReason: b.statusReason ?? null,
+      paymentStatus: b.paymentStatus,
+      requiresPayment: b.moveType !== 'OPEN_HOUSE',
       createdAt: b.createdAt,
       updatedAt: b.updatedAt,
     };

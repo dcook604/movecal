@@ -191,3 +191,22 @@
   font-size: 0.875rem;
   line-height: 1.5;
 }
+
+/* ── Payment guidance + progress ────────────────────────────── */
+.payment-guide { background: #eff6ff; border: 1px solid #bfdbfe; border-left: 4px solid #3090d0; border-radius: 8px; padding: 14px 16px; margin: 0 0 20px; color: #1e3a5f; font-size: 0.9375rem; line-height: 1.5; }
+.payment-guide-title { margin: 0 0 6px; font-size: 1rem; }
+.payment-guide ol { margin: 0; padding-left: 20px; }
+.payment-guide li + li { margin-top: 4px; }
+.payment-guide-text { margin: 10px 0 0; white-space: pre-line; padding-top: 10px; border-top: 1px solid #bfdbfe; }
+.already-booked { text-align: center; font-size: 0.9rem; margin: -4px 0 16px; color: #475569; }
+.progress { list-style: none; display: flex; margin: 0 0 20px; padding: 0; gap: 4px; }
+.progress-step { flex: 1; display: flex; flex-direction: column; align-items: center; text-align: center; position: relative; font-size: 0.8125rem; color: #64748b; }
+.progress-step:not(:last-child)::after { content: ''; position: absolute; top: 13px; left: calc(50% + 16px); right: calc(-50% + 16px); height: 2px; background: #cbd5e1; }
+.progress-step--done:not(:last-child)::after { background: #16a34a; }
+.progress-dot { width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; background: #e2e8f0; color: #475569; font-weight: 700; margin-bottom: 4px; }
+.progress-step--done .progress-dot { background: #16a34a; color: #fff; }
+.progress-step--current .progress-dot { background: #f59e0b; color: #fff; }
+.progress-step--current .progress-label { color: #92400e; font-weight: 600; }
+.progress-step--bad .progress-dot { background: #dc2626; color: #fff; }
+.progress-step--bad .progress-label { color: #991b1b; font-weight: 600; }
+.progress-closed { background: #fef2f2; border: 1px solid #fecaca; border-radius: 8px; padding: 10px 14px; margin-bottom: 20px; color: #7f1d1d; }

@@ -9,7 +9,7 @@ import { prisma } from '../prisma.js';
 import { identityFields } from '../utils/identity.js';
 import { assertNoConflict, assertNoDuplicateMoveRequest } from '../services/conflictService.js';
 import { requireAuth, requireRole } from '../middleware/auth.js';
-import { sendEmail, sendNotificationRecipients, bookingDetailsHtml, lateArrivalNoticeHtml, emailWrapper, sendPaymentConfirmation, sendPaymentReminderEmail } from '../services/emailService.js';
+import { sendEmail, sendNotificationRecipients, bookingDetailsHtml, lateArrivalNoticeHtml, paymentInstructionsHtml, emailWrapper, sendPaymentConfirmation, sendPaymentReminderEmail } from '../services/emailService.js';
 import { diffFields, logAudit } from '../services/auditService.js';
 import { config } from '../config.js';
 import { escapeHtml as esc } from '../utils/security.js';
@@ -239,7 +239,7 @@ export async function bookingRoutes(app: FastifyInstance) {
         emailWrapper(
           'Booking Request Received',
           'Your booking request has been submitted and is pending review.',
-          bookingDetailsHtml(booking) + lateArrivalNoticeHtml(),
+          bookingDetailsHtml(booking) + (booking.moveType === MoveType.OPEN_HOUSE ? '' : await paymentInstructionsHtml(prisma, booking.unit)) + lateArrivalNoticeHtml(),
           undefined,
           manageUrl
         )

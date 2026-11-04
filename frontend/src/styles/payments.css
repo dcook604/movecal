@@ -561,3 +561,13 @@
 .suggestions-label { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.04em; color: #64748b; margin-bottom: 6px; }
 .suggestion { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 10px 12px; border: 1px solid #e2e8f0; border-radius: 8px; margin-bottom: 6px; flex-wrap: wrap; }
 .suggestion--best { border-color: #22c55e; background: #f0fdf4; }
+
+/* ── Stacked tables on small screens ────────────────────── */
+@media (max-width: 640px) {
+  .payments-table--stack thead { position: absolute; left: -9999px; }
+  .payments-table--stack, .payments-table--stack tbody, .payments-table--stack tr, .payments-table--stack td { display: block; width: 100%; }
+  .payments-table--stack tr { border: 1px solid #e2e8f0; border-radius: 8px; margin-bottom: 10px; padding: 6px 10px; background: #fff; }
+  .payments-table--stack td { display: flex; justify-content: space-between; gap: 12px; border: 0; padding: 5px 0; text-align: right; }
+  .payments-table--stack td::before { content: attr(data-label); color: #64748b; font-weight: 600; text-align: left; }
+  .review-head { flex-direction: column; }
+}

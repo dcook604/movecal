@@ -3,6 +3,7 @@ import dayjs from 'dayjs';
 import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../api';
 import { selectedSlotRange } from '../utils/bookingTime';
+import { PaymentGuide } from '../components/ResidentPayment';
 import '../styles/resident.css';
 
 // ── Time slot definitions ─────────────────────────────────────
@@ -294,6 +295,7 @@ export function ResidentSubmissionPage() {
       setTouched(new Set(['residentName', 'residentEmail', 'residentPhone', 'unit', 'moveDate', 'notes']));
       setError('Please fix the errors above before submitting');
       setMessage('');
+      setTimeout(() => document.querySelector('.input-error')?.scrollIntoView({ block: 'center', behavior: 'smooth' }), 0);
       return;
     }
 
@@ -445,6 +447,9 @@ export function ResidentSubmissionPage() {
           be granted. You will need to pay for another move slot on a different day. This policy is
           strictly enforced.
         </div>
+
+        <p className="already-booked">Already submitted a request? <Link to="/find-booking">Find or manage your booking</Link></p>
+        {!isOpenHouseType && <PaymentGuide unit={form.unit} />}
 
         <form onSubmit={submit}>
           <fieldset className="form-group">
@@ -645,7 +650,7 @@ export function ResidentSubmissionPage() {
           </button>
 
           {error && (
-            <p className="error-message">
+            <p className="error-message" role="alert">
               {error}
               {isDuplicateError && (
                 <>

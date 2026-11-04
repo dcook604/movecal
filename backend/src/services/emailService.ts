@@ -74,6 +74,20 @@ export function lateArrivalNoticeHtml(): string {
   </div>`;
 }
 
+/** "How to pay" block: staff-configured instructions plus the standard explanation of what happens next. */
+export async function paymentInstructionsHtml(prisma: PrismaClient, unit: string): Promise<string> {
+  const settings = await prisma.appSetting.findFirst({ select: { paymentInstructions: true } });
+  const custom = settings?.paymentInstructions?.trim();
+  return `<div style="margin-top:20px;padding:12px 16px;background:#eff6ff;border:1px solid #bfdbfe;border-left:4px solid #3090d0;border-radius:6px;font-family:Arial,sans-serif;font-size:14px;line-height:1.5;color:#1e3a5f">
+    <strong>What happens next:</strong>
+    <ol style="margin:8px 0 0;padding-left:20px">
+      <li>Pay the move fee${custom ? ' as described below' : ''}. Please quote <strong>unit ${esc(unit)}</strong> on your invoice.</li>
+      <li>Once your payment is received your booking is approved automatically, usually within a few minutes, and you will receive a confirmation email.</li>
+    </ol>
+    ${custom ? `<p style="margin:10px 0 0">${esc(custom).replace(/\n/g, '<br>')}</p>` : ''}
+  </div>`;
+}
+
 export function emailWrapper(title: string, intro: string, body: string, footer?: string, manageUrl?: string): string {
   const manageButton = manageUrl
     ? `<p style="margin:24px 0;text-align:center">

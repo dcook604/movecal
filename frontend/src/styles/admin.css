@@ -581,3 +581,44 @@
 .timeline-title { font-weight: 600; font-size: 0.9rem; }
 .timeline-meta { font-size: 0.78rem; color: #64748b; }
 .timeline-detail { font-size: 0.82rem; color: #334155; margin-top: 2px; }
+
+/* ── Shared UI: dialogs, toasts ─────────────────────────── */
+.modal-title { margin: 0 0 14px; font-size: 1.125rem; }
+.modal-body { color: #334155; font-size: 0.925rem; line-height: 1.5; margin-bottom: 4px; }
+.modal-body dl { display: grid; grid-template-columns: 90px 1fr; gap: 4px 10px; margin: 10px 0 0; font-size: 0.875rem; }
+.modal-body dt { color: #64748b; }
+.modal-body dd { margin: 0; }
+.modal-actions { display: flex; gap: 10px; margin-top: 20px; flex-wrap: wrap; }
+.modal-card:focus { outline: none; }
+.toast-stack { position: fixed; right: 16px; bottom: 16px; z-index: 1100; display: flex; flex-direction: column; gap: 8px; max-width: min(420px, calc(100vw - 32px)); }
+.toast { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 12px 14px; border-radius: 8px; font-size: 0.9rem; box-shadow: 0 8px 24px rgba(0,0,0,0.18); color: #fff; }
+.toast--success { background: #166534; }
+.toast--error { background: #b91c1c; }
+.toast-close { background: transparent; border: 0; color: inherit; font-size: 1.2rem; line-height: 1; padding: 0 2px; cursor: pointer; min-height: 0; }
+
+/* ── Queue: bulk + more menu ────────────────────────────── */
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
+.reason-chips { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
+.reason-text { width: 100%; }
+.bulk-bar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; padding: 10px 14px; margin-bottom: 12px; }
+.bulk-select-all { display: flex; align-items: center; gap: 8px; font-size: 0.85rem; color: #475569; margin-bottom: 8px; }
+.booking-select { width: 18px; height: 18px; margin: 4px 10px 0 0; flex: none; }
+.booking-card { align-items: flex-start; }
+.more-menu { position: relative; display: inline-block; }
+.more-menu summary { list-style: none; cursor: pointer; user-select: none; }
+.more-menu summary::-webkit-details-marker { display: none; }
+.more-menu-list { position: absolute; right: 0; top: calc(100% + 4px); z-index: 20; min-width: 200px; background: #fff; border: 1px solid #cbd5e1; border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,0.15); padding: 4px; display: flex; flex-direction: column; }
+.more-menu-list button { text-align: left; background: transparent; color: #0f172a; border: 0; padding: 9px 12px; border-radius: 6px; font-size: 0.875rem; cursor: pointer; }
+.more-menu-list button:hover:not(:disabled) { background: #f1f5f9; }
+.more-menu-list button.danger { color: #b91c1c; }
+
+@media (max-width: 640px) {
+  .admin-subnav { flex-direction: column; align-items: stretch; }
+  .admin-subnav nav a { padding: 10px 12px; }
+  .admin-subnav-user { justify-content: space-between; }
+  .booking-card { flex-wrap: wrap; }
+  .booking-actions { width: 100%; flex-wrap: wrap; }
+  .queue-search { width: 100%; min-width: 0; }
+  .modal-card { padding: 20px 16px; }
+  .toast-stack { left: 16px; right: 16px; max-width: none; }
+}

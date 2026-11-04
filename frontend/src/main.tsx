@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import ReactDOM from 'react-dom/client';
 import { BrowserRouter, Navigate, NavLink, Route, Routes, useLocation } from 'react-router-dom';
 import { PublicCalendarPage } from './pages/PublicCalendarPage';
@@ -18,15 +18,23 @@ import './styles.css';
 
 function Nav() {
   const { pathname } = useLocation();
+  const [role, setRole] = useState(getStoredRole);
+
+  useEffect(() => {
+    const update = () => setRole(getStoredRole());
+    window.addEventListener('movecal-auth', update);
+    return () => window.removeEventListener('movecal-auth', update);
+  }, []);
 
   // Hide nav on TV mode — full-screen display
   if (pathname === '/tv') return null;
   return (
-    <nav className="site-nav">
-      <NavLink to="/" end>Calendar</NavLink>
-      <NavLink to="/submit">Resident Submit</NavLink>
-      <NavLink to="/admin">Admin</NavLink>
-      <NavLink to="/tv">Lobby TV</NavLink>
+    <nav className="site-nav" aria-label="Main">
+      <NavLink to="/submit">Book a Move</NavLink>
+      <NavLink to="/find-booking">Find My Booking</NavLink>
+      {role && <NavLink to="/" end>Calendar</NavLink>}
+      {role && <NavLink to="/tv">Lobby TV</NavLink>}
+      <NavLink to="/admin" className="site-nav-staff">{role ? 'Admin' : 'Staff login'}</NavLink>
     </nav>
   );
 }

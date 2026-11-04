@@ -3,6 +3,7 @@ import { useParams, useSearchParams } from 'react-router-dom';
 import dayjs from 'dayjs';
 import { api } from '../api';
 import { parseBookingTime, selectedSlotRange } from '../utils/bookingTime';
+import { BookingProgress, PaymentGuide } from '../components/ResidentPayment';
 import '../styles/resident.css';
 
 // ── Time slot definitions (mirrors backend rules) ─────────────
@@ -149,6 +150,9 @@ type Booking = {
   loadingBayRequired: boolean;
   notes: string | null;
   status: BookingStatus;
+  paymentStatus?: string;
+  requiresPayment?: boolean;
+  statusReason?: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -376,6 +380,9 @@ export function ResidentBookingPage() {
           <h2 className="resident-form-title" style={{ margin: 0 }}>My Booking</h2>
           <span className={`status-badge ${statusCfg.className}`}>{statusCfg.label}</span>
         </div>
+
+        <BookingProgress status={booking.status} paymentStatus={booking.paymentStatus} requiresPayment={booking.requiresPayment} statusReason={booking.statusReason} />
+        {booking.requiresPayment && booking.paymentStatus !== 'PAID' && ['SUBMITTED', 'PENDING'].includes(booking.status) && <PaymentGuide unit={booking.unit} heading="Payment still needed" />}
 
         <style>{`
           .status-badge {
@@ -605,12 +612,12 @@ export function ResidentBookingPage() {
           <fieldset className="form-group" style={{ borderColor: '#fecaca' }}>
             <legend className="form-group-legend" style={{ color: '#dc2626' }}>Not Approved</legend>
             <p style={{ fontSize: '0.9375rem', color: '#991b1b', margin: 0 }}>
-              Unfortunately this booking request could not be approved. Please contact building management if you have any questions.
+              Unfortunately this booking request could not be approved{booking.statusReason ? ` (${booking.statusReason})` : ''}. Please contact building management if you have any questions.
             </p>
           </fieldset>
         )}
 
-        {error && <p className="error-message" style={{ marginTop: 12 }}>{error}</p>}
+        {error && <p className="error-message" role="alert" style={{ marginTop: 12 }}>{error}</p>}
       </div>
     </div>
   );

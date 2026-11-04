@@ -223,10 +223,10 @@ export function PublicCalendarPage() {
       {/* View Controls */}
       <div className="view-controls">
         <div className="view-toggle">
-          <button className={`view-btn ${view === 'month'  ? 'active' : ''}`} onClick={() => setView('month')}>Month</button>
-          <button className={`view-btn ${view === 'week'   ? 'active' : ''}`} onClick={() => setView('week')}>Week</button>
-          <button className={`view-btn ${view === 'day'    ? 'active' : ''}`} onClick={() => setView('day')}>Day</button>
-          <button className={`view-btn ${view === 'agenda' ? 'active' : ''}`} onClick={() => setView('agenda')}>List</button>
+          <button className={`view-btn ${view === 'month'  ? 'active' : ''}`} aria-pressed={view === 'month'} onClick={() => setView('month')}>Month</button>
+          <button className={`view-btn ${view === 'week'   ? 'active' : ''}`} aria-pressed={view === 'week'} onClick={() => setView('week')}>Week</button>
+          <button className={`view-btn ${view === 'day'    ? 'active' : ''}`} aria-pressed={view === 'day'} onClick={() => setView('day')}>Day</button>
+          <button className={`view-btn ${view === 'agenda' ? 'active' : ''}`} aria-pressed={view === 'agenda'} onClick={() => setView('agenda')}>List</button>
         </div>
 
         <div className="legend">
