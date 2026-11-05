@@ -443,9 +443,11 @@ export function ResidentSubmissionPage() {
         </div>
 
         <div className="late-arrival-notice" role="alert">
-          <strong>Late arrival policy:</strong> If you are late for your move, additional time will not
-          be granted. You will need to pay for another move slot on a different day. This policy is
-          strictly enforced.
+          <strong>Late arrival &amp; overlap policy:</strong> If you are late for your move, additional time will not
+          be granted. You will need to pay for another move slot on a different day. If another move
+          is scheduled immediately after yours and overlaps, you will need to wait until that move
+          completes, and you will be charged an additional $100 per hour for security overtime. This
+          policy is strictly enforced.
         </div>
 
         <p className="already-booked">Already submitted a request? <Link to="/find-booking">Find or manage your booking</Link></p>

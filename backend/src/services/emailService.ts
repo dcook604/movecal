@@ -66,11 +66,11 @@ export function bookingDetailsHtml(b: BookingEmailData, includeContact = false, 
 }
 
 export const LATE_ARRIVAL_NOTICE =
-  'If you are late for your move, additional time will not be granted. You will need to pay for another move slot on a different day. This policy is strictly enforced.';
+  'If you are late for your move, additional time will not be granted. You will need to pay for another move slot on a different day. If another move is scheduled immediately after yours and overlaps, you will need to wait until that move completes, and you will be charged an additional $100 per hour for security overtime. This policy is strictly enforced.';
 
 export function lateArrivalNoticeHtml(): string {
   return `<div style="margin-top:20px;padding:12px 16px;background:#fef2f2;border:1px solid #fca5a5;border-left:4px solid #dc2626;border-radius:6px;font-family:Arial,sans-serif;font-size:14px;line-height:1.5;color:#7f1d1d">
-    <strong>Late arrival policy:</strong> ${LATE_ARRIVAL_NOTICE}
+    <strong>Late arrival &amp; overlap policy:</strong> ${LATE_ARRIVAL_NOTICE}
   </div>`;
 }
 
