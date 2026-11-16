@@ -106,6 +106,18 @@ function weekdayHoursUntil(target: dayjs.Dayjs): number {
   return total;
 }
 
+// Earliest date offering at least one move in/out slot with the required notice.
+function earliestNoticeDate(): string {
+  let d = dayjs().startOf('day');
+  for (let i = 0; i < 30; i++, d = d.add(1, 'day')) {
+    const slots = getSlotsForDateAndType(d.format('YYYY-MM-DD'), 'MOVE_IN');
+    if (slots?.some(sl => weekdayHoursUntil(dayjs(`${d.format('YYYY-MM-DD')}T${sl.start}:00`)) >= MIN_NOTICE_HOURS)) {
+      return d.format('YYYY-MM-DD');
+    }
+  }
+  return d.format('YYYY-MM-DD');
+}
+
 function timeToMins(hhmm: string): number {
   const [h, m] = hhmm.split(':').map(Number);
   return h * 60 + m;
@@ -266,8 +278,13 @@ export function ResidentSubmissionPage() {
   const isHoliday = !!form.moveDate && STATUTORY_HOLIDAYS.has(form.moveDate);
   const isOpenHouseWeekday = form.moveType === 'OPEN_HOUSE' && !!form.moveDate && !isHoliday &&
     (() => { const d = dayjs(form.moveDate).day(); return d !== 0 && d !== 6; })();
+  const needsNotice = form.moveType === 'MOVE_IN' || form.moveType === 'MOVE_OUT';
+  const minDate = needsNotice ? earliestNoticeDate() : dayjs().format('YYYY-MM-DD');
   const rawSlots = getSlotsForDateAndType(form.moveDate ?? '', form.moveType ?? 'MOVE_IN');
-  const availableSlots = rawSlots ? filterAvailableSlots(rawSlots, takenRanges) : rawSlots;
+  const noticeSlots = rawSlots && needsNotice
+    ? rawSlots.filter(sl => weekdayHoursUntil(dayjs(`${form.moveDate}T${sl.start}:00`)) >= MIN_NOTICE_HOURS)
+    : rawSlots;
+  const availableSlots = noticeSlots ? filterAvailableSlots(noticeSlots, takenRanges) : noticeSlots;
 
   const handleDateChange = (_dateStr: string) => {
     setSelectedSlots([]);
@@ -275,7 +292,9 @@ export function ResidentSubmissionPage() {
   };
 
   const handleMoveTypeChange = (moveType: string) => {
-    setForm({ ...form, moveType });
+    const noticeType = moveType === 'MOVE_IN' || moveType === 'MOVE_OUT';
+    const clearDate = noticeType && form.moveDate && form.moveDate < earliestNoticeDate();
+    setForm({ ...form, moveType, ...(clearDate ? { moveDate: '' } : {}) });
     setSelectedSlots([]);
   };
 
@@ -547,7 +566,7 @@ export function ResidentSubmissionPage() {
             <div className="form-field">
               <label htmlFor="move-date" className="required">Date</label>
               <input id="move-date" type="date"
-                min={dayjs().format('YYYY-MM-DD')}
+                min={minDate}
                 className={fieldErrors.moveDate ? 'input-error' : ''}
                 value={form.moveDate ?? ''}
                 onChange={(e) => { handleDateChange(e.target.value); handleFieldChange('moveDate', e.target.value); }}
