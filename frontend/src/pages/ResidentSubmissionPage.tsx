@@ -91,6 +91,21 @@ function generateTimeSlots(rangeStartMins: number, rangeEndMins: number, blockMi
   return slots;
 }
 
+const MIN_NOTICE_HOURS = 48;
+
+// Hours from now until the given local date/time, not counting Saturdays or Sundays.
+function weekdayHoursUntil(target: dayjs.Dayjs): number {
+  let cursor = dayjs();
+  let total = 0;
+  while (cursor.isBefore(target)) {
+    const next = cursor.add(1, 'day').startOf('day');
+    const stop = next.isBefore(target) ? next : target;
+    if (cursor.day() !== 0 && cursor.day() !== 6) total += stop.diff(cursor, 'minute') / 60;
+    cursor = stop;
+  }
+  return total;
+}
+
 function timeToMins(hhmm: string): number {
   const [h, m] = hhmm.split(':').map(Number);
   return h * 60 + m;
@@ -325,6 +340,13 @@ export function ResidentSubmissionPage() {
       return;
     }
 
+    if ((form.moveType === 'MOVE_IN' || form.moveType === 'MOVE_OUT') &&
+        weekdayHoursUntil(dayjs(`${form.moveDate}T${selectedRange.start}:00`)) < MIN_NOTICE_HOURS) {
+      setError('Move in and move out bookings require at least 48 hours notice, not including weekends. Under no conditions will a move in or move out be permitted with less notice.');
+      setMessage('');
+      return;
+    }
+
     // Build startDatetime / endDatetime from date + selected slot(s)
     const startDatetime = `${form.moveDate}T${selectedRange.start}:00`;
     const endDatetime   = `${form.moveDate}T${selectedRange.end}:00`;
@@ -440,6 +462,12 @@ export function ResidentSubmissionPage() {
             </div>
           )}
           <p className="move-times-holiday">No Bookings Permitted on Statutory Holidays</p>
+        </div>
+
+        <div className="late-arrival-notice" role="alert">
+          <strong>48 hour notice required:</strong> Move in and move out bookings must be made at least
+          48 hours in advance, not including weekends. Under no conditions will a move in or move out
+          be permitted with less than 48 hours notice.
         </div>
 
         <div className="late-arrival-notice" role="alert">

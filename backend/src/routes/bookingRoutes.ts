@@ -14,6 +14,7 @@ import { diffFields, logAudit } from '../services/auditService.js';
 import { config } from '../config.js';
 import { escapeHtml as esc } from '../utils/security.js';
 import { validateMoveTime } from '../utils/moveTimeValidator.js';
+import { hasMinimumNotice, MIN_NOTICE_MESSAGE } from '../utils/bookingNotice.js';
 import { autoMatchBooking } from '../services/paymentService.js';
 
 // ── Email / phone validation helpers ──────────────────────────────────
@@ -94,6 +95,10 @@ export async function bookingRoutes(app: FastifyInstance) {
     const timeValidation = validateMoveTime(body.startDatetime, body.endDatetime, body.moveType);
     if (!timeValidation.valid) {
       return reply.status(400).send({ message: timeValidation.error });
+    }
+
+    if ((body.moveType === MoveType.MOVE_IN || body.moveType === MoveType.MOVE_OUT) && !hasMinimumNotice(body.startDatetime)) {
+      return reply.status(400).send({ message: MIN_NOTICE_MESSAGE });
     }
 
     const systemUser = await prisma.user.findFirst({ where: { role: UserRole.CONCIERGE } });
