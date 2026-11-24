@@ -7,16 +7,21 @@ export const AUTO_MATCH_MIN_MARGIN = 10;
 
 export type UnitMatch = 'exact' | 'suffix';
 
-/** "T4-1105" → "1105"; a unit with no dash is returned normalized as-is. */
-function unitTail(unit: string): string {
-  const parts = unit.split('-');
-  return normalizeUnit(parts[parts.length - 1]);
+/**
+ * The trailing unit number of a unit string. Splits on any non-alphanumeric separator so
+ * "T4-1105", "T4 1105" and "T4.1105" all yield "1105". A unit with no separator is
+ * returned normalized as-is.
+ */
+export function unitTail(unit: string): string {
+  const parts = unit.split(/[^a-z0-9]+/i).filter(Boolean);
+  return normalizeUnit(parts[parts.length - 1] ?? '');
 }
 
 /**
  * Compare a unit from an invoice with a booking's unit. Residents often omit the tower
- * prefix ("1105" vs "T4-1105"), so a match on the last dash segment counts as a weaker
- * "suffix" match. Very short tails (<3 chars) never suffix-match.
+ * prefix ("1105" vs "T4-1105"), so a match on the trailing unit number counts as a weaker
+ * "suffix" match. Exactly one side must carry a prefix (otherwise two different towers
+ * with the same number would match), and very short tails (<3 chars) never suffix-match.
  */
 export function matchUnits(a: string | null | undefined, b: string | null | undefined): UnitMatch | null {
   if (!a || !b) return null;
@@ -26,7 +31,9 @@ export function matchUnits(a: string | null | undefined, b: string | null | unde
   if (na === nb) return 'exact';
   const ta = unitTail(a);
   const tb = unitTail(b);
-  if (ta.length >= 3 && ta === tb && (a.includes('-') !== b.includes('-'))) return 'suffix';
+  const prefixedA = na !== ta;
+  const prefixedB = nb !== tb;
+  if (ta.length >= 3 && ta === tb && prefixedA !== prefixedB) return 'suffix';
   return null;
 }
 
@@ -65,7 +72,9 @@ export function scoreCandidates<T>(
     const unitMatch = matchUnits(unit, itemUnit);
     if (!unitMatch) continue;
     const days = daysBetween(refDate, date);
-    out.push({ item, unitMatch, days, score: (unitMatch === 'exact' ? 60 : 40) + dateScore(days) });
+    // An exact normalized unit is definitive; a suffix match may be a different tower, so
+    // it should never win autoselection over an exact match even if it is closer in time.
+    out.push({ item, unitMatch, days, score: (unitMatch === 'exact' ? 70 : 40) + dateScore(days) });
   }
   return out.sort((x, y) => y.score - x.score || x.days - y.days);
 }

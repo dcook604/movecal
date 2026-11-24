@@ -381,7 +381,7 @@ export async function bookingRoutes(app: FastifyInstance) {
       }
     }
 
-    const updated = await prisma.$transaction(async (tx) => {
+    let updated = await prisma.$transaction(async (tx) => {
       const newStatus = body.status ?? existing.status;
       if (['SUBMITTED', 'PENDING', 'APPROVED'].includes(newStatus)) {
         await assertNoDuplicateMoveRequest(tx, {
@@ -429,6 +429,30 @@ export async function bookingRoutes(app: FastifyInstance) {
         }
       });
     });
+
+    // If the details that drive matching changed (unit, move type, date or status), retry
+    // linking an existing unmatched payment before notifications are built.
+    const matchableStatuses: BookingStatus[] = [BookingStatus.SUBMITTED, BookingStatus.PENDING, BookingStatus.APPROVED];
+    const matchableStatus = matchableStatuses.includes(updated.status);
+    if (
+      matchableStatus &&
+      updated.paymentStatus === PaymentStatus.NONE &&
+      (body.unit !== undefined || body.moveType !== undefined || body.startDatetime !== undefined || statusChanging)
+    ) {
+      const match = await autoMatchBooking(updated).catch((err) => {
+        app.log.error({ err, bookingId: updated.id }, 'Invoice approval check after booking update failed');
+        return null;
+      });
+      if (match?.ok) {
+        updated = match.booking;
+        // The manual approval flow below already notifies the resident.
+        if (match.transitioned && !(statusChanging && body.status === BookingStatus.APPROVED)) {
+          await sendPaymentConfirmation(prisma, match.booking).catch((err) => {
+            app.log.error({ err, bookingId: match.booking.id }, 'Failed to send payment confirmation');
+          });
+        }
+      }
+    }
 
     if (allowOverride) await logAudit(prisma, user.id, 'CONFLICT_OVERRIDE', updated.id, { old: existing, new: updated });
 

@@ -1,8 +1,9 @@
 import dayjs from 'dayjs';
+import { Prisma } from '@prisma/client';
 import { prisma } from '../prisma.js';
 import { config } from '../config.js';
 import { classifyFeeText, extractUnit, FeeType, FEE_TYPES, isFeeType } from './feeClassifier.js';
-import { autoMatchPayment, markPaymentReversed } from './paymentService.js';
+import { autoMatchPayment, markPaymentReversed, retryUnmatchedPayments } from './paymentService.js';
 import { sendPaymentConfirmation, sendPaymentReversedNotice } from './emailService.js';
 
 const POLL_INTERVAL_MS = 5 * 60 * 1000; // every 5 minutes
@@ -12,6 +13,11 @@ const INITIAL_LOOKBACK_HOURS = 24;
 const CURSOR_OVERLAP_MS = 2 * 60 * 1000;
 const PAGE_SIZE = 100;
 const MAX_PAGES = 50;
+// Hard limits on outbound calls so one hung request can't stall the whole poll.
+const FETCH_TIMEOUT_MS = 30_000;
+const LLM_TIMEOUT_MS = 8_000;
+// Invoices are processed a few at a time; classification may call out to an LLM.
+const INVOICE_CONCURRENCY = 4;
 
 // Invoice Ninja invoice status ids
 const STATUS_PAID = 4;
@@ -19,6 +25,24 @@ const STATUS_CANCELLED = 5;
 const STATUS_REVERSED = 6;
 
 type Logger = { info: (msg: string) => void; error: (obj: object, msg: string) => void };
+
+/** Run `fn` over `items` with a bounded number of concurrent workers. */
+async function forEachLimit<T>(items: T[], limit: number, fn: (item: T) => Promise<void>): Promise<void> {
+  let next = 0;
+  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (next < items.length) {
+      const item = items[next++];
+      await fn(item);
+    }
+  });
+  await Promise.all(workers);
+}
+
+function toDate(value: string | undefined | null): Date | null {
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
 
 // ── LLM fallback for line items the rules can't classify ───────────
 
@@ -30,32 +54,42 @@ function parseLlmAnswer(text: string): FeeType | null {
   return isFeeType(t) ? t : null;
 }
 
-async function classifyWithDeepSeek(productKey: string, notes: string): Promise<FeeType | null> {
+async function classifyWithDeepSeek(productKey: string, notes: string, log: Logger): Promise<FeeType | null> {
   if (!config.deepseekApiKey) return null;
   try {
     const response = await fetch('https://api.deepseek.com/chat/completions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${config.deepseekApiKey}` },
       body: JSON.stringify({ model: 'deepseek-chat', max_tokens: 10, messages: [{ role: 'user', content: CLASSIFY_PROMPT(productKey, notes) }] }),
+      signal: AbortSignal.timeout(LLM_TIMEOUT_MS),
     });
-    if (!response.ok) return null;
+    if (!response.ok) {
+      log.error({ status: response.status }, 'DeepSeek fee classification failed');
+      return null;
+    }
     const json = (await response.json()) as { choices?: { message?: { content?: string } }[] };
     return parseLlmAnswer(json.choices?.[0]?.message?.content ?? '');
-  } catch { return null; }
+  } catch (err) {
+    log.error({ err }, 'DeepSeek fee classification request failed');
+    return null;
+  }
 }
 
-async function classifyWithClaude(productKey: string, notes: string): Promise<FeeType | null> {
+async function classifyWithClaude(productKey: string, notes: string, log: Logger): Promise<FeeType | null> {
   if (!config.anthropicApiKey) return null;
   try {
     const Anthropic = (await import('@anthropic-ai/sdk')).default;
-    const client = new Anthropic({ apiKey: config.anthropicApiKey });
+    const client = new Anthropic({ apiKey: config.anthropicApiKey, timeout: LLM_TIMEOUT_MS, maxRetries: 0 });
     const message = await client.messages.create({
       model: 'claude-sonnet-4-6',
       max_tokens: 10,
       messages: [{ role: 'user', content: CLASSIFY_PROMPT(productKey, notes) }],
     });
     return parseLlmAnswer(message.content[0].type === 'text' ? message.content[0].text : '');
-  } catch { return null; }
+  } catch (err) {
+    log.error({ err }, 'Claude fee classification request failed');
+    return null;
+  }
 }
 
 // ── Invoice Ninja API ──────────────────────────────────────────────
@@ -89,6 +123,7 @@ async function fetchInvoices(statusId: number, since: Date): Promise<InvoiceNinj
 
     const response = await fetch(url.toString(), {
       headers: { 'X-Api-Token': config.invoiceNinjaApiToken!, 'X-Requested-With': 'XMLHttpRequest' },
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
     });
     if (!response.ok) throw new Error(`Invoice Ninja API responded with ${response.status}`);
 
@@ -102,7 +137,7 @@ async function fetchInvoices(statusId: number, since: Date): Promise<InvoiceNinj
 
 // ── Process invoices ───────────────────────────────────────────────
 
-async function classifyInvoice(invoice: InvoiceNinjaInvoice) {
+async function classifyInvoice(invoice: InvoiceNinjaInvoice, log: Logger) {
   // Use the first line item that classifies; unit may come from any line item.
   const items = invoice.line_items?.length ? invoice.line_items : [{ product_key: '', notes: '' }];
   let feeType: FeeType | null = null;
@@ -112,8 +147,8 @@ async function classifyInvoice(invoice: InvoiceNinjaInvoice) {
     if (t) { feeType = t; chosen = li; break; }
   }
   if (!feeType) {
-    feeType = (await classifyWithDeepSeek(chosen.product_key ?? '', chosen.notes ?? ''))
-           ?? (await classifyWithClaude(chosen.product_key ?? '', chosen.notes ?? ''));
+    feeType = (await classifyWithDeepSeek(chosen.product_key ?? '', chosen.notes ?? '', log))
+           ?? (await classifyWithClaude(chosen.product_key ?? '', chosen.notes ?? '', log));
   }
   let unit: string | null = null;
   for (const li of [chosen, ...items]) {
@@ -123,53 +158,68 @@ async function classifyInvoice(invoice: InvoiceNinjaInvoice) {
   return { feeType: feeType ?? 'unknown', unit, lineDate: chosen.date };
 }
 
-async function processPaidInvoice(invoice: InvoiceNinjaInvoice, log: Logger): Promise<void> {
-  if (await prisma.paymentsLedger.findUnique({ where: { invoiceId: invoice.id } })) return;
+type PaidInvoiceOutcome = 'skipped' | 'needs_review' | 'matched' | 'unmatched';
 
-  const paidAt = invoice.paid_date ? new Date(invoice.paid_date) : new Date();
-  const { feeType, unit, lineDate } = await classifyInvoice(invoice);
-  const invoiceDate = lineDate ?? invoice.date;
+async function processPaidInvoice(invoice: InvoiceNinjaInvoice, log: Logger): Promise<PaidInvoiceOutcome> {
+  if (await prisma.paymentsLedger.findUnique({ where: { invoiceId: invoice.id } })) return 'skipped';
+
+  const paidAt = toDate(invoice.paid_date) ?? new Date();
+  const { feeType, unit, lineDate } = await classifyInvoice(invoice, log);
+  const invoiceDate = toDate(lineDate) ?? toDate(invoice.date);
   const billingPeriod = dayjs(invoiceDate ?? paidAt).format('YYYY-MM');
 
   const paidToDate = Number(invoice.paid_to_date);
   const invoiceAmount = Number(invoice.amount);
   const amountPaid = paidToDate > 0 ? paidToDate : Number.isFinite(invoiceAmount) ? invoiceAmount : null;
 
-  const payment = await prisma.paymentsLedger.create({
-    data: {
-      clientId: invoice.client_id,
-      invoiceId: invoice.id,
-      billingPeriod,
-      feeType,
-      unit,
-      paidAt,
-      invoiceDate: invoiceDate ? new Date(invoiceDate) : null,
-      amountPaid,
-    },
-  });
+  let payment;
+  try {
+    payment = await prisma.paymentsLedger.create({
+      data: {
+        clientId: invoice.client_id,
+        invoiceId: invoice.id,
+        billingPeriod,
+        feeType,
+        unit,
+        paidAt,
+        invoiceDate,
+        amountPaid,
+      },
+    });
+  } catch (err) {
+    // Another worker imported the same invoice first.
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') return 'skipped';
+    throw err;
+  }
 
-  if (feeType === 'unknown' || !unit) return; // needs a human; shows in the review queue
+  if (feeType === 'unknown' || !unit) return 'needs_review'; // needs a human; shows in the review queue
 
   const result = await autoMatchPayment(payment).catch((err) => {
     log.error({ err, invoiceId: invoice.id }, 'Auto-match failed');
     return null;
   });
-  if (result?.ok && result.transitioned) {
-    await sendPaymentConfirmation(prisma, result.booking).catch((err) => {
-      log.error({ err, bookingId: result.booking.id }, 'Failed to send payment confirmation');
-    });
+  if (result?.ok) {
+    if (result.transitioned) {
+      await sendPaymentConfirmation(prisma, result.booking).catch((err) => {
+        log.error({ err, bookingId: result.booking.id }, 'Failed to send payment confirmation');
+      });
+    }
+    return 'matched';
   }
+  return 'unmatched';
 }
 
-async function processReversedInvoice(invoice: InvoiceNinjaInvoice, log: Logger): Promise<void> {
+async function processReversedInvoice(invoice: InvoiceNinjaInvoice, log: Logger): Promise<boolean> {
   const payment = await prisma.paymentsLedger.findUnique({ where: { invoiceId: invoice.id } });
-  if (!payment || payment.reversedAt) return;
+  if (!payment || payment.reversedAt) return false;
   const booking = await markPaymentReversed(payment);
   if (booking) {
     await sendPaymentReversedNotice(prisma, booking, invoice.id).catch((err) => {
       log.error({ err, bookingId: booking.id }, 'Failed to send payment reversal notice');
     });
+    return true;
   }
+  return false;
 }
 
 // ── Poller ─────────────────────────────────────────────────────────
@@ -190,25 +240,67 @@ export async function runInvoiceNinjaPoll(log: Logger): Promise<void> {
 
     log.info('Invoice Ninja poll started');
 
-    let paid: InvoiceNinjaInvoice[];
-    let reversed: InvoiceNinjaInvoice[];
+    let paid: InvoiceNinjaInvoice[] = [];
+    let reversed: InvoiceNinjaInvoice[] = [];
+    let fetched = false;
     try {
-      paid = await fetchInvoices(STATUS_PAID, since);
-      reversed = [...(await fetchInvoices(STATUS_CANCELLED, since)), ...(await fetchInvoices(STATUS_REVERSED, since))];
+      const [paidInvoices, cancelled, reversals] = await Promise.all([
+        fetchInvoices(STATUS_PAID, since),
+        fetchInvoices(STATUS_CANCELLED, since),
+        fetchInvoices(STATUS_REVERSED, since),
+      ]);
+      paid = paidInvoices;
+      reversed = [...cancelled, ...reversals];
+      fetched = true;
     } catch (err) {
       // Cursor is not advanced, so the same window is retried on the next poll.
       log.error({ err }, 'Failed to fetch invoices from Invoice Ninja');
-      return;
     }
 
-    for (const invoice of paid) {
-      await processPaidInvoice(invoice, log).catch((err) => log.error({ err, invoiceId: invoice.id }, 'Failed to process Invoice Ninja invoice'));
-    }
-    for (const invoice of reversed) {
-      await processReversedInvoice(invoice, log).catch((err) => log.error({ err, invoiceId: invoice.id }, 'Failed to process reversed invoice'));
+    const counts = { skipped: 0, needs_review: 0, matched: 0, unmatched: 0, reversals: 0, failed: 0 };
+
+    if (fetched) {
+      await forEachLimit(paid, INVOICE_CONCURRENCY, async (invoice) => {
+        try {
+          counts[await processPaidInvoice(invoice, log)]++;
+        } catch (err) {
+          counts.failed++;
+          log.error({ err, invoiceId: invoice.id }, 'Failed to process Invoice Ninja invoice');
+        }
+      });
+      await forEachLimit(reversed, INVOICE_CONCURRENCY, async (invoice) => {
+        try {
+          if (await processReversedInvoice(invoice, log)) counts.reversals++;
+        } catch (err) {
+          counts.failed++;
+          log.error({ err, invoiceId: invoice.id }, 'Failed to process reversed invoice');
+        }
+      });
     }
 
-    await prisma.appSetting.update({ where: { id: settings.id }, data: { invoiceNinjaCursor: startedAt } });
+    // Bookings submitted (or corrected) since a payment was ingested can make it matchable.
+    const retry = await retryUnmatchedPayments(log).catch((err) => {
+      log.error({ err }, 'Failed to retry unmatched payments');
+      return { checked: 0, matched: 0, matches: [] };
+    });
+    for (const { result } of retry.matches) {
+      if (result.transitioned) {
+        await sendPaymentConfirmation(prisma, result.booking).catch((err) => {
+          log.error({ err, bookingId: result.booking.id }, 'Failed to send payment confirmation');
+        });
+      }
+    }
+
+    if (fetched) {
+      await prisma.appSetting.update({ where: { id: settings.id }, data: { invoiceNinjaCursor: startedAt } });
+    }
+
+    log.info(
+      `Invoice Ninja poll finished — fetched ${paid.length + reversed.length} invoice(s): ` +
+        `${counts.skipped} already imported, ${counts.needs_review} need review, ${counts.matched} auto-matched, ` +
+        `${counts.unmatched} unmatched, ${counts.reversals} reversed, ${counts.failed} failed; ` +
+        `retry checked ${retry.checked}, matched ${retry.matched}`
+    );
   } finally {
     running = false;
   }

@@ -6,7 +6,7 @@ import { requireRole } from '../middleware/auth.js';
 import { logAudit } from '../services/auditService.js';
 import { sendPaymentConfirmation } from '../services/emailService.js';
 import { FEE_TYPES } from '../services/feeClassifier.js';
-import { applyMatch, autoMatchPayment, candidateBookingsForPayment, MatchResult, unmatchPayment } from '../services/paymentService.js';
+import { applyMatch, autoMatchPayment, candidateBookingsForPayments, retryUnmatchedPayments, unmatchPayment, MatchResult } from '../services/paymentService.js';
 
 const MANAGERS = [UserRole.COUNCIL, UserRole.PROPERTY_MANAGER];
 const idParam = z.string().uuid();
@@ -57,25 +57,22 @@ export async function paymentRoutes(app: FastifyInstance) {
     const bookingById = new Map(bookings.map((b) => [b.id, b]));
     const matched = matchedRaw.map((p) => ({ ...p, booking: bookingById.get(p.moveApprovals[0]?.moveRequestId) ?? null }));
 
-    const unmatched = await Promise.all(
-      unmatchedRaw.map(async (p) => {
-        const candidates = await candidateBookingsForPayment(p);
-        return {
-          ...p,
-          suggestions: candidates.slice(0, 3).map((c) => ({
-            bookingId: c.item.id,
-            unit: c.item.unit,
-            residentName: c.item.residentName,
-            moveType: c.item.moveType,
-            moveDate: c.item.moveDate,
-            status: c.item.status,
-            score: c.score,
-            unitMatch: c.unitMatch,
-            days: c.days,
-          })),
-        };
-      })
-    );
+    // One query for all unpaid bookings instead of one per unmatched payment.
+    const suggestionsByPayment = await candidateBookingsForPayments(unmatchedRaw);
+    const unmatched = unmatchedRaw.map((p) => ({
+      ...p,
+      suggestions: (suggestionsByPayment.get(p.id) ?? []).slice(0, 3).map((c) => ({
+        bookingId: c.item.id,
+        unit: c.item.unit,
+        residentName: c.item.residentName,
+        moveType: c.item.moveType,
+        moveDate: c.item.moveDate,
+        status: c.item.status,
+        score: c.score,
+        unitMatch: c.unitMatch,
+        days: c.days,
+      })),
+    }));
 
     return { unmatched, matched, dismissed, reversed, month: activeMonth };
   });
@@ -117,19 +114,10 @@ export async function paymentRoutes(app: FastifyInstance) {
 
   // Re-run automatic matching over everything still unmatched.
   app.post('/api/admin/payments-ledger/retry-match', { preHandler: [requireRole(MANAGERS)] }, async (req) => {
-    const unmatched = await prisma.paymentsLedger.findMany({
-      where: { moveApprovals: { none: {} }, dismissed: false, reversedAt: null, feeType: { not: 'unknown' }, unit: { not: null } },
-    });
-    let matched = 0;
-    for (const payment of unmatched) {
-      const result = await autoMatchPayment(payment);
-      if (result?.ok) {
-        matched++;
-        await notifyIfApproved(result);
-      }
-    }
-    await logAudit(prisma, req.user.id, 'PAYMENTS_RETRY_MATCH', undefined, { checked: unmatched.length, matched });
-    return { matched, checked: unmatched.length };
+    const { checked, matched, matches } = await retryUnmatchedPayments(app.log);
+    for (const { result } of matches) await notifyIfApproved(result);
+    await logAudit(prisma, req.user.id, 'PAYMENTS_RETRY_MATCH', undefined, { checked, matched });
+    return { matched, checked };
   });
 
   // Search bookings for manual payment matching

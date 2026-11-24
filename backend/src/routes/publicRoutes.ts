@@ -1,13 +1,13 @@
 import { FastifyInstance } from 'fastify';
-import { BookingStatus, NotifyEvent } from '@prisma/client';
+import { BookingStatus, NotifyEvent, PaymentStatus } from '@prisma/client';
 import { z } from 'zod';
 import { prisma } from '../prisma.js';
-import { sendNotificationRecipients, sendEmail, bookingDetailsHtml, emailWrapper } from '../services/emailService.js';
+import { sendNotificationRecipients, sendEmail, bookingDetailsHtml, emailWrapper, sendPaymentConfirmation } from '../services/emailService.js';
 import { assertNoConflict, assertNoDuplicateMoveRequest } from '../services/conflictService.js';
 import { validateMoveTime } from '../utils/moveTimeValidator.js';
 import { config } from '../config.js';
 import { diffFields, logAudit } from '../services/auditService.js';
-import { getSystemUserId } from '../services/paymentService.js';
+import { autoMatchBooking, getSystemUserId } from '../services/paymentService.js';
 import dayjs from 'dayjs';
 import { escapeHtml as esc, safeEqual } from '../utils/security.js';
 
@@ -243,7 +243,20 @@ export async function publicRoutes(app: FastifyInstance) {
         changes: diffFields(booking, updated, ['startDatetime', 'endDatetime', 'notes', 'elevatorRequired', 'loadingBayRequired']),
       });
       await sendUpdateNotification(prisma, updated, app.log);
-      return bookingToResponse(updated);
+
+      // A new move date can resolve a previously ambiguous payment match.
+      const match = updated.paymentStatus === PaymentStatus.NONE
+        ? await autoMatchBooking(updated).catch((err) => {
+            app.log.error({ err, bookingId: updated.id }, 'Invoice approval check after resident update failed');
+            return null;
+          })
+        : null;
+      if (match?.ok && match.transitioned) {
+        await sendPaymentConfirmation(prisma, match.booking).catch((err) => {
+          app.log.error({ err, bookingId: match.booking.id }, 'Failed to send payment confirmation');
+        });
+      }
+      return bookingToResponse(match?.ok ? match.booking : updated);
     }
 
     // Simple field update (no time change)

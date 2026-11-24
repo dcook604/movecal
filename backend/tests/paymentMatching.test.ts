@@ -12,6 +12,11 @@ describe('matchUnits', () => {
     expect(matchUnits('T4-1105', '1105')).toBe('suffix');
     expect(matchUnits('1105', 'T4-1105')).toBe('suffix');
   });
+  it('treats spaces and dots the same as a dash when finding the unit tail', () => {
+    expect(matchUnits('1105', 'T4 1105')).toBe('suffix');
+    expect(matchUnits('T4.1105', '1105')).toBe('suffix');
+    expect(matchUnits('T4-1105', 'T4 1105')).toBe('exact');
+  });
   it('does not match different towers with the same number, or short tails', () => {
     expect(matchUnits('T4-1105', 'T2-1105')).toBeNull();
     expect(matchUnits('T4-5', '5')).toBeNull();
@@ -33,6 +38,10 @@ describe('selectAutoMatch', () => {
   it('prefers the clearly nearer booking', () => {
     const c = scoreCandidates('1105', ref, [{ unit: '1105', date: d('2026-03-03') }, { unit: '1105', date: d('2026-05-01') }], get);
     expect(selectAutoMatch(c)?.item.date).toEqual(d('2026-03-03'));
+  });
+  it('prefers an exact unit match over a closer suffix match', () => {
+    const c = scoreCandidates('T4-1105', ref, [{ unit: '1105', date: d('2026-03-03') }, { unit: 'T4-1105', date: d('2026-04-10') }], get);
+    expect(selectAutoMatch(c)?.item.unit).toBe('T4-1105');
   });
   it('refuses a candidate months away from the invoice', () => {
     const c = scoreCandidates('1105', ref, [{ unit: '1105', date: d('2026-09-01') }], get);

@@ -10,7 +10,8 @@ import { config } from '../config.js';
 import { assertNoConflict, assertNoDuplicateMoveRequest } from '../services/conflictService.js';
 import { requireAuth, requireRole } from '../middleware/auth.js';
 import { validateMoveTime } from '../utils/moveTimeValidator.js';
-import { sendEmail, emailWrapper } from '../services/emailService.js';
+import { sendEmail, emailWrapper, sendPaymentConfirmation } from '../services/emailService.js';
+import { autoMatchBooking } from '../services/paymentService.js';
 import { BCRYPT_ROUNDS, DUMMY_PASSWORD_HASH, MIN_PASSWORD_LENGTH, safeEqual, sha256Hex, escapeHtml } from '../utils/security.js';
 
 const intakeSchema = z.object({
@@ -233,7 +234,17 @@ export async function systemRoutes(app: FastifyInstance) {
       });
     });
 
-    return booking;
+    // Payment-first flow: link an invoice that was already paid for this unit/move type.
+    const match = await autoMatchBooking(booking).catch((err) => {
+      req.log.error({ err, bookingId: booking.id }, 'Invoice approval check failed');
+      return null;
+    });
+    if (match?.ok && match.transitioned) {
+      await sendPaymentConfirmation(prisma, match.booking).catch((err) => {
+        req.log.error({ err, bookingId: match.booking.id }, 'Failed to send payment confirmation');
+      });
+    }
+    return match?.ok ? match.booking : booking;
   });
 
   app.get('/api/admin/bookings/export.csv', { preHandler: [requireRole([UserRole.CONCIERGE, UserRole.COUNCIL, UserRole.PROPERTY_MANAGER])] }, async (_, reply) => {
